@@ -5,5 +5,7 @@
 .get /api/user/ (get all user)
 
 .post /api/user/ (create user)
+
 .put /api/user/:id (update user)
+
 .delete /api/user/:id (delete user)
