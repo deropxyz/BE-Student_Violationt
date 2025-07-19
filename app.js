@@ -15,13 +15,13 @@ app.use(
     origin: [
       "http://localhost:5173",
       "https://smk14-production.up.railway.app",
+      "http://192.168.193.229:5173",
     ],
     credentials: true,
   })
 );
 
 app.use(express.json());
-
 app.use("/api/auth", authRoute);
 app.use("/api/superadmin", superadminRoute);
 app.use("/api/users", userRoute);
