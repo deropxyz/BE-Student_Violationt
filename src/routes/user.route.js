@@ -7,7 +7,7 @@ const {
   deleteUser,
 } = require("../controllers/user.controller");
 
-const { authenticate, requireRole } = require("../middleware/auth.middleware");
+const { authenticate, requireRole } = require("../middlewares/auth.middleware");
 
 // hanya superadmin yang bisa akses
 router.use(authenticate, requireRole(["superadmin"]));
