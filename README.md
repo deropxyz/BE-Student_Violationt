@@ -2,10 +2,10 @@
 
 .get /api/superadmin/users get token superadmin
 
-.get /api/user/ (get all user)
+kelola user
 
-.post /api/user/ (create user)
+/api/users/teachers
 
-.put /api/user/:id (update user)
+/api/users/students
 
-.delete /api/user/:id (delete user)
+/api/users/bk
