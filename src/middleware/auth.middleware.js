@@ -33,7 +33,17 @@ const requireRole = (roles) => {
   };
 };
 
+const isSuperadmin = (req, res, next) => {
+  if (req.user?.role !== "superadmin") {
+    return res
+      .status(403)
+      .json({ message: "Akses ditolak. Hanya untuk superadmin." });
+  }
+  next();
+};
+
 module.exports = {
   authenticate,
   requireRole,
+  isSuperadmin,
 };
