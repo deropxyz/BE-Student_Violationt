@@ -13,7 +13,7 @@ async function main() {
       name: "Super Admin",
       email: "superadmin@smk14.sch.id",
       password: hashedPassword,
-      role: "superadmin", // sesuaikan dengan enum di model
+      role: "superadmin",
     },
   });
 

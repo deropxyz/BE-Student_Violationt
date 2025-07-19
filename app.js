@@ -3,7 +3,9 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 const superadminRoute = require("./src/routes/superadmin.route");
 const authRoute = require("./src/routes/auth.route");
-const userRoute = require("./src/routes/user.route");
+const teacherRoute = require("./src/routes/teacher.route");
+const studentRoute = require("./src/routes/student.route");
+const bkRoute = require("./src/routes/bk.route");
 
 dotenv.config();
 
@@ -24,7 +26,9 @@ app.use(
 app.use(express.json());
 app.use("/api/auth", authRoute);
 app.use("/api/superadmin", superadminRoute);
-app.use("/api/users", userRoute);
+app.use("/api/users/teachers", teacherRoute);
+app.use("/api/users/students", studentRoute);
+app.use("/api/users/bk", bkRoute);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
