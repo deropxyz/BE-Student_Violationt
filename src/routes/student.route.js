@@ -7,9 +7,8 @@ const {
   deleteSiswa,
 } = require("../controllers/student.controller");
 
-const { authenticate, requireRole } = require("../middlewares/auth.middleware");
-
 // hanya superadmin yang bisa kelola data siswa
+const { authenticate, requireRole } = require("../middlewares/auth.middleware");
 router.use(authenticate, requireRole(["superadmin"]));
 
 router.get("/", getAllSiswa);
