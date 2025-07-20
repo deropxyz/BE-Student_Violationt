@@ -4,18 +4,17 @@ const bcrypt = require("bcrypt");
 const prisma = new PrismaClient();
 
 async function main() {
-  // Password default
-  const passwordadmin = await bcrypt.hash("superadmin", 10);
+  const passwordAdmin = await bcrypt.hash("superadmin", 10);
   const hashedPassword = await bcrypt.hash("password123", 10);
 
-  // Seed Superadmin (jika belum ada)
+  // Seed Superadmin
   await prisma.user.upsert({
     where: { email: "superadmin@smk14.com" },
     update: {},
     create: {
       name: "Super Admin",
       email: "superadmin@smk14.com",
-      password: passwordadmin,
+      password: passwordAdmin,
       role: "superadmin",
     },
   });
@@ -39,44 +38,6 @@ async function main() {
     skipDuplicates: true,
   });
 
-  const siswaData = [
-    {
-      nis: "10001",
-      name: "Siswa A",
-      class: "XII RPL 1",
-    },
-    {
-      nis: "10002",
-      name: "Siswa B",
-      class: "XII RPL 2",
-    },
-  ];
-
-  for (const siswa of siswaData) {
-    const emailDummy = `${siswa.nis}@nis.local`;
-
-    const user = await prisma.user.upsert({
-      where: { email: emailDummy },
-      update: {},
-      create: {
-        name: siswa.name,
-        email: emailDummy, // agar tetap unik & tidak null
-        password: hashedPassword,
-        role: "siswa",
-      },
-    });
-
-    await prisma.student.upsert({
-      where: { userId: user.id },
-      update: {},
-      create: {
-        userId: user.id,
-        nis: siswa.nis,
-        class: siswa.class,
-      },
-    });
-  }
-
   // Seed BK
   await prisma.user.createMany({
     data: [
@@ -90,14 +51,73 @@ async function main() {
     skipDuplicates: true,
   });
 
-  console.log(
-    "✅ Data akun superadmin, guru, siswa, dan BK berhasil ditambahkan"
-  );
+  // Seed Classroom
+  const classroomA = await prisma.classroom.upsert({
+    where: { name: "XII RPL 1" },
+    update: {},
+    create: {
+      name: "XII RPL 1",
+      batchYear: 2025,
+    },
+  });
+
+  const classroomB = await prisma.classroom.upsert({
+    where: { name: "XII RPL 2" },
+    update: {},
+    create: {
+      name: "XII RPL 2",
+      batchYear: 2025,
+    },
+  });
+
+  // Seed Siswa
+  const siswaData = [
+    {
+      nis: "10001",
+      name: "Siswa A",
+      class: "XII RPL 1",
+      classroomId: classroomA.id,
+    },
+    {
+      nis: "10002",
+      name: "Siswa B",
+      class: "XII RPL 2",
+      classroomId: classroomB.id,
+    },
+  ];
+
+  for (const siswa of siswaData) {
+    const email = `${siswa.nis}@smk14.sch.id`;
+
+    const user = await prisma.user.upsert({
+      where: { email },
+      update: {},
+      create: {
+        name: siswa.name,
+        email: email,
+        password: hashedPassword,
+        role: "siswa",
+      },
+    });
+
+    await prisma.student.upsert({
+      where: { userId: user.id },
+      update: {},
+      create: {
+        userId: user.id,
+        nis: siswa.nis,
+        class: siswa.class,
+        classroomId: siswa.classroomId,
+      },
+    });
+  }
+
+  console.log("✅ Seed selesai: superadmin, guru, bk, classroom, siswa");
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error("❌ Error seeding:", e);
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());
