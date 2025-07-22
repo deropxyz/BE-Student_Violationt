@@ -6,7 +6,7 @@ const authRoute = require("./src/routes/auth.route");
 const teacherRoute = require("./src/routes/teacher.route");
 const studentRoute = require("./src/routes/student.route");
 const bkRoute = require("./src/routes/bk.route");
-const classroomRoutes = require("./routes/classroom");
+const classroomRoutes = require("./src/routes/classroom");
 
 dotenv.config();
 

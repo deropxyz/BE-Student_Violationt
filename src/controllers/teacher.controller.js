@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 const getAllTeachers = async (req, res) => {
   const teachers = await prisma.user.findMany({
-    where: { role: "guru" }, // atau TEACHER kalau enum-nya gitu
+    where: { role: "guru" },
   });
   res.json(teachers);
 };

@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const classroomController = require("../controllers/classroomController");
+const classroomController = require("../controllers/classroom.controller");
 
 // hanya superadmin yang bisa kelola data siswa
 const { authenticate, requireRole } = require("../middlewares/auth.middleware");
