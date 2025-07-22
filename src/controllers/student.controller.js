@@ -132,10 +132,74 @@ const importSiswa = async (req, res) => {
   }
 };
 
+// Ambil detail satu siswa berdasarkan ID
+const getDetailSiswa = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const siswa = await prisma.student.findUnique({
+      where: { id: parseInt(id) },
+      include: { user: true, classroom: true },
+    });
+    if (!siswa) return res.status(404).json({ error: "Siswa tidak ditemukan" });
+    res.json(siswa);
+  } catch (err) {
+    res.status(500).json({ error: "Gagal mengambil detail siswa" });
+  }
+};
+
+// Pencarian siswa berdasarkan nama atau NIS
+const searchSiswa = async (req, res) => {
+  const { q } = req.query;
+  try {
+    const siswa = await prisma.student.findMany({
+      where: {
+        OR: [
+          { nis: { contains: q || "", mode: "insensitive" } },
+          { user: { name: { contains: q || "", mode: "insensitive" } } },
+        ],
+      },
+      include: { user: true, classroom: true },
+    });
+    res.json(siswa);
+  } catch (err) {
+    res.status(500).json({ error: "Gagal mencari siswa" });
+  }
+};
+
+// Export data siswa ke Excel
+const exportSiswa = async (req, res) => {
+  try {
+    const siswa = await prisma.student.findMany({
+      include: { user: true, classroom: true },
+    });
+    const data = siswa.map((s) => ({
+      Nama: s.user?.name,
+      NIS: s.nis,
+      Email: s.user?.email,
+      Kelas: s.classroom?.name,
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Siswa");
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+    res.setHeader("Content-Disposition", "attachment; filename=siswa.xlsx");
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: "Gagal export data siswa" });
+  }
+};
+
 module.exports = {
   getAllSiswa,
   createSiswa,
   updateSiswa,
   deleteSiswa,
   importSiswa,
+  getDetailSiswa,
+  searchSiswa,
+  exportSiswa,
 };

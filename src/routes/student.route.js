@@ -8,6 +8,9 @@ const {
   updateSiswa,
   deleteSiswa,
   importSiswa,
+  getDetailSiswa,
+  searchSiswa,
+  exportSiswa,
 } = require("../controllers/student.controller");
 
 // hanya superadmin yang bisa kelola data
@@ -18,4 +21,9 @@ router.post("/", createSiswa);
 router.put("/:id", updateSiswa);
 router.delete("/:id", deleteSiswa);
 router.post("/import", upload.single("file"), importSiswa);
+
+// Fitur tambahan
+router.get("/detail/:id", getDetailSiswa);
+router.get("/search", searchSiswa);
+router.get("/export", exportSiswa);
 module.exports = router;
