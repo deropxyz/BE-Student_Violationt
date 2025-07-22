@@ -27,6 +27,13 @@ const createSiswa = async (req, res) => {
   const email = `${nis}@smk14.sch.id`;
   const password = "smkn14garut";
   try {
+    // Cek apakah NIS sudah ada
+    const nisExist = await prisma.student.findUnique({
+      where: { nis },
+    });
+    if (nisExist) {
+      return res.status(400).json({ error: "NIS sudah ada" });
+    }
     const user = await prisma.user.create({
       data: { name, email, password, role: "siswa" },
     });
@@ -40,6 +47,10 @@ const createSiswa = async (req, res) => {
     });
     res.json(student);
   } catch (err) {
+    // Handle error unik NIS dari Prisma
+    if (err.code === "P2002" && err.meta?.target?.includes("nis")) {
+      return res.status(400).json({ error: "NIS sudah ada" });
+    }
     res.status(500).json({ error: "Gagal menambah siswa" });
   }
 };
