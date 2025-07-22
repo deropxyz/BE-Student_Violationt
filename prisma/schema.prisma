@@ -40,10 +40,9 @@ model Student {
 }
 
 model Classroom {
-  id        Int       @id @default(autoincrement())
-  name      String    @unique
-  batchYear Int
-  students  Student[]
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  students Student[]
 }
 
 model Violation {

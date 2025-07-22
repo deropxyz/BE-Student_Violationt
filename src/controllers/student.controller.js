@@ -1,18 +1,31 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
+const XLSX = require("xlsx");
+const multer = require("multer");
+const upload = multer({ dest: "uploads/" });
 
 const getAllSiswa = async (req, res) => {
-  const { classroomId } = req.query;
-  const filter = classroomId ? { classroomId: parseInt(classroomId) } : {};
-  const siswa = await prisma.student.findMany({
-    where: filter,
-    include: { user: true, classroom: true },
-  });
-  res.json(siswa);
+  // Ambil classroomId dari params jika ada, fallback ke query
+  const classroomId = req.params.classroomId || req.query.classroomId;
+  let filter = {};
+  if (classroomId) {
+    filter = { classroomId: parseInt(classroomId) };
+  }
+  try {
+    const siswa = await prisma.student.findMany({
+      where: filter,
+      include: { user: true, classroom: true },
+    });
+    res.json(siswa);
+  } catch (err) {
+    res.status(500).json({ error: "Gagal mengambil data siswa" });
+  }
 };
 
 const createSiswa = async (req, res) => {
-  const { nis, name, email, password, classroomId } = req.body;
+  const { nis, name, classroomId } = req.body;
+  const email = `${nis}@smk14.sch.id`;
+  const password = "smkn14garut";
   try {
     const user = await prisma.user.create({
       data: { name, email, password, role: "siswa" },
@@ -69,9 +82,49 @@ const deleteSiswa = async (req, res) => {
   }
 };
 
+const importSiswa = async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "File tidak ditemukan" });
+
+  try {
+    const workbook = XLSX.readFile(req.file.path);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const siswaList = XLSX.utils.sheet_to_json(sheet);
+
+    for (const siswa of siswaList) {
+      const { nis, name, kelas } = siswa;
+      const email = `${nis}@smk14.sch.id`;
+      const password = "smkn14garut";
+
+      // Cari kelas berdasarkan nama
+      let classroom = await prisma.classroom.findUnique({
+        where: { name: kelas },
+      });
+      // Buat user dan student
+      await prisma.user
+        .create({
+          data: { name, email, password, role: "siswa" },
+        })
+        .then(async (user) => {
+          await prisma.student.create({
+            data: {
+              userId: user.id,
+              nis,
+              class: "",
+              classroomId: classroom.id,
+            },
+          });
+        });
+    }
+    res.json({ message: "Import siswa berhasil" });
+  } catch (err) {
+    res.status(500).json({ error: "Gagal import siswa" });
+  }
+};
+
 module.exports = {
   getAllSiswa,
   createSiswa,
   updateSiswa,
   deleteSiswa,
+  importSiswa,
 };

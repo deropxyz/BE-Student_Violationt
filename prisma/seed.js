@@ -57,7 +57,6 @@ async function main() {
     update: {},
     create: {
       name: "XII RPL 1",
-      batchYear: 2025,
     },
   });
 
@@ -66,7 +65,6 @@ async function main() {
     update: {},
     create: {
       name: "XII RPL 2",
-      batchYear: 2025,
     },
   });
 

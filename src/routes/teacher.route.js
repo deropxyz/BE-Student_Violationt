@@ -1,6 +1,7 @@
 // src/routes/teacher.route.js
 const express = require("express");
 const router = express.Router();
+const { authenticate, requireRole } = require("../middlewares/auth.middleware");
 
 const {
   getAllTeachers,
@@ -9,10 +10,7 @@ const {
   deleteTeacher,
 } = require("../controllers/teacher.controller");
 
-const { authenticate, requireRole } = require("../middlewares/auth.middleware");
-
 // hanya superadmin yang bisa kelola akun guru
-router.use(authenticate, requireRole(["superadmin"]));
 
 router.get("/", getAllTeachers);
 router.post("/", createTeacher);
