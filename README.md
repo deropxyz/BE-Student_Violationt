@@ -12,19 +12,46 @@
 
 - `GET /api/users/teachers` — Get semua guru
 - `POST /api/users/teachers` — Tambah guru
+  Payload:
+  {
+  "name": "",
+  "email": "",
+  }
 - `PUT /api/users/teachers/:id` — Update guru
+  Payload:
+  {
+  "name": " ",
+  "email": " "
+  }
 - `DELETE /api/users/teachers/:id` — Hapus guru
 - `GET /api/users/teachers/:id` — Detail guru
 - `GET /api/users/teachers/search?q=...` — Cari guru
 - `PUT /api/users/teachers/:id/reset-password` — Reset password guru
+  Payload:
+  {
+  "password": " " //password baru
+  }
 
 - `GET /api/users/students` — Get semua siswa
 - `POST /api/users/students` — Tambah siswa
+  Payload:
+  {
+  "nis": "2206012",
+  "class": "XII RPL 1",
+  "classroomId":
+  }
 - `PUT /api/users/students/:id` — Update siswa
+  Payload:
+  {
+  "nis": "",
+  "class": " ",
+  "classroomId":
+  }
 - `DELETE /api/users/students/:id` — Hapus siswa
 - `GET /api/users/students/:id` — Detail siswa
 - `GET /api/users/students/search?q=...` — Cari siswa
 - `POST /api/users/students/import` — Import siswa dari Excel
+  Payload: file Excel (.xlsx) dengan kolom: nis, name, kelas
 - `GET /api/users/students/export` — Export data siswa ke Excel
 
 - `GET /api/users/bk` — Get semua BK
@@ -33,7 +60,15 @@
 
 - `GET /api/classroom` — Get semua kelas
 - `POST /api/classroom` — Tambah kelas
+  Payload:
+  {
+  "name": " "
+  }
 - `PUT /api/classroom/:id` — Update kelas
+  Payload:
+  {
+  "name": " "
+  }
 - `DELETE /api/classroom/:id` — Hapus kelas
 - `GET /api/classroom/:id/students` — Get siswa di kelas
 
@@ -41,16 +76,39 @@
 
 - `GET /api/violation` — Get semua jenis pelanggaran
 - `POST /api/violation` — Tambah jenis pelanggaran (BK)
+  Payload:
+  {
+  "name": "Tidak memakai seragam",
+  "category": "Kedisiplinan",
+  "point": 10
+  }
 - `PUT /api/violation/:id` — Update jenis pelanggaran (BK)
+  Payload:
+  {
+  "name": "Terlambat",
+  "category": "Kedisiplinan",
+  "point": 5
+  }
 - `DELETE /api/violation/:id` — Hapus jenis pelanggaran (BK)
 - `GET /api/violation/:id` — Detail jenis pelanggaran
 
 ## Laporan Pelanggaran Siswa
 
 - `POST /api/student-violation` — Input pelanggaran siswa (guru/BK)
+  Payload:
+  {
+  "studentId": 1,
+  "violationId": 2,
+  "description": "Siswa tidak memakai seragam pada hari Senin.",
+  }
 - `GET /api/student-violation` — Get semua laporan pelanggaran siswa (BK/superadmin)
 - `GET /api/student-violation/:id` — Detail laporan pelanggaran siswa
 - `PUT /api/student-violation/:id` — Update laporan pelanggaran siswa (BK/superadmin)
+  Payload:
+  {
+  "status": "approved",
+  "description": "Sudah dikonfirmasi oleh BK",
+  }
 - `DELETE /api/student-violation/:id` — Hapus laporan pelanggaran siswa (BK/superadmin)
 - `PUT /api/student-violation/:id/approve` — Approval pelanggaran siswa (BK/superadmin)
 - `PUT /api/student-violation/:id/reject` — Reject pelanggaran siswa (BK/superadmin)
