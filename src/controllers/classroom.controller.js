@@ -2,7 +2,7 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 // Ambil semua kelas
-exports.getAllClassrooms = async (req, res) => {
+const getAllClassroom = async (req, res) => {
   try {
     const classrooms = await prisma.classroom.findMany({
       include: {
@@ -22,7 +22,7 @@ exports.getAllClassrooms = async (req, res) => {
 };
 
 // Tambah kelas baru
-exports.createClassroom = async (req, res) => {
+const createClassroom = async (req, res) => {
   const { name, batchYear } = req.body;
   try {
     const newClassroom = await prisma.classroom.create({
@@ -35,7 +35,7 @@ exports.createClassroom = async (req, res) => {
 };
 
 // Update kelas
-exports.updateClassroom = async (req, res) => {
+const updateClassroom = async (req, res) => {
   const { id } = req.params;
   const { name, batchYear } = req.body;
   try {
@@ -50,7 +50,7 @@ exports.updateClassroom = async (req, res) => {
 };
 
 // Hapus kelas
-exports.deleteClassroom = async (req, res) => {
+const deleteClassroom = async (req, res) => {
   const { id } = req.params;
   try {
     await prisma.classroom.delete({
@@ -63,7 +63,7 @@ exports.deleteClassroom = async (req, res) => {
 };
 
 // Assign satu siswa ke kelas
-exports.assignStudentToClass = async (req, res) => {
+const assignStudentToClass = async (req, res) => {
   const { classroomId, studentId } = req.params;
 
   try {
@@ -83,7 +83,7 @@ exports.assignStudentToClass = async (req, res) => {
 };
 
 // Lihat semua siswa dalam kelas
-exports.getStudentsInClass = async (req, res) => {
+const getStudentsInClass = async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -106,7 +106,7 @@ exports.getStudentsInClass = async (req, res) => {
 };
 
 // Pindahkan semua siswa ke kelas baru
-exports.moveStudentsToNewClass = async (req, res) => {
+const moveStudentsToNewClass = async (req, res) => {
   const { fromClassId, toClassId } = req.body;
 
   try {
@@ -119,4 +119,14 @@ exports.moveStudentsToNewClass = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Gagal memindahkan siswa", error });
   }
+};
+
+module.exports = {
+  getAllClassroom,
+  createClassroom,
+  updateClassroom,
+  deleteClassroom,
+  assignStudentToClass,
+  getStudentsInClass,
+  moveStudentsToNewClass,
 };

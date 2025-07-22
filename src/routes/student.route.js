@@ -9,7 +9,6 @@ const {
 
 // hanya superadmin yang bisa kelola data
 const { authenticate, requireRole } = require("../middlewares/auth.middleware");
-router.use(authenticate, requireRole(["superadmin"]));
 
 router.get("/", getAllSiswa);
 router.post("/", createSiswa);

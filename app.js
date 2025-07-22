@@ -30,7 +30,7 @@ app.use("/api/superadmin", superadminRoute);
 app.use("/api/users/teachers", teacherRoute);
 app.use("/api/users/students", studentRoute);
 app.use("/api/users/bk", bkRoute);
-app.use("/classrooms", classroomRoutes);
+app.use("/api/classrooms", classroomRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

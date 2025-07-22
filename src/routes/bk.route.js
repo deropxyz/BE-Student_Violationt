@@ -9,8 +9,6 @@ const {
 
 const { authenticate, requireRole } = require("../middlewares/auth.middleware");
 
-router.use(authenticate, requireRole(["superadmin"]));
-
 router.get("/", getAllBK);
 router.post("/", createBK);
 router.put("/:id", updateBK);

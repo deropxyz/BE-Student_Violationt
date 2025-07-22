@@ -4,10 +4,10 @@ const classroomController = require("../controllers/classroom.controller");
 
 // hanya superadmin yang bisa kelola data siswa
 const { authenticate, requireRole } = require("../middlewares/auth.middleware");
-router.use(authenticate, requireRole(["superadmin"]));
 
 // CRUD Kelas
-router.get("/", classroomController.getAllClassrooms);
+router.get("/", classroomController.getAllClassroom);
+
 router.post("/", classroomController.createClassroom);
 router.put("/:id", classroomController.updateClassroom);
 router.delete("/:id", classroomController.deleteClassroom);
