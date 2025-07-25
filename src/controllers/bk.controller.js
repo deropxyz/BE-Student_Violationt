@@ -2,7 +2,10 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const getAllBK = async (req, res) => {
-  const bk = await prisma.user.findMany({ where: { role: "bk" } });
+  const bk = await prisma.user.findMany({
+    where: { role: "bk" },
+    orderBy: { name: "asc" },
+  });
   res.json(bk);
 };
 

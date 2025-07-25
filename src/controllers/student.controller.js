@@ -15,6 +15,7 @@ const getAllSiswa = async (req, res) => {
     const siswa = await prisma.student.findMany({
       where: filter,
       include: { user: true, classroom: true },
+      orderBy: { nis: "asc" },
     });
     res.json(siswa);
   } catch (err) {
