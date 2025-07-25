@@ -24,6 +24,6 @@ router.get("/:id", getTeacherDetail);
 // Pencarian guru berdasarkan nama atau email
 router.get("/search", searchTeacher);
 // Reset password guru
-router.post("/:id/reset-password", resetTeacherPassword);
+router.put("/:id/reset-password", resetTeacherPassword);
 
 module.exports = router;
