@@ -11,13 +11,14 @@ const getAllTeachers = async (req, res) => {
 };
 
 const createTeacher = async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email } = req.body;
   // Validasi email unik
   const emailExist = await prisma.user.findUnique({ where: { email } });
   if (emailExist) {
     return res.status(400).json({ error: "Email sudah digunakan" });
   }
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const defaultPassword = "smkn14@garut";
+  const hashedPassword = await bcrypt.hash(defaultPassword, 10);
   const newTeacher = await prisma.user.create({
     data: {
       name,
