@@ -34,8 +34,20 @@ const createBK = async (req, res) => {
 const updateBK = async (req, res) => {
   const { id } = req.params;
   const { name, email } = req.body;
+  // Validasi email unik jika diupdate
+  if (email) {
+    const emailExist = await prisma.user.findFirst({
+      where: {
+        email,
+        id: { not: parseInt(id) },
+      },
+    });
+    if (emailExist) {
+      return res.status(400).json({ error: "Email sudah digunakan" });
+    }
+  }
   const updated = await prisma.user.update({
-    where: { id },
+    where: { id: parseInt(id) },
     data: { name, email },
   });
   res.json(updated);
@@ -43,8 +55,12 @@ const updateBK = async (req, res) => {
 
 const deleteBK = async (req, res) => {
   const { id } = req.params;
-  await prisma.user.delete({ where: { id } });
-  res.json({ message: "BK berhasil dihapus" });
+  try {
+    await prisma.user.delete({ where: { id: parseInt(id) } });
+    res.json({ message: "BK berhasil dihapus" });
+  } catch (err) {
+    res.status(500).json({ error: "Gagal hapus BK" });
+  }
 };
 
 const getBKDetail = async (req, res) => {
