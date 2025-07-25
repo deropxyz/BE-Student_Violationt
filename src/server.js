@@ -10,6 +10,7 @@ app.use(
     origin: [
       "http://localhost:5173",
       "https://smk14-production.up.railway.app",
+      "https://kesiswaan-smkn14garut.vercel.app",
     ],
     credentials: true,
   })

@@ -83,14 +83,17 @@ const searchBK = async (req, res) => {
 // Reset password BK
 const resetBKPassword = async (req, res) => {
   const { id } = req.params;
-  const { password } = req.body;
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const defaultPassword = "smkn14@garut";
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
     await prisma.user.update({
       where: { id: parseInt(id) },
       data: { password: hashedPassword },
     });
-    res.json({ message: "Password BK berhasil direset" });
+    res.json({
+      message: "Password BK berhasil direset ke default",
+      defaultPassword,
+    });
   } catch (err) {
     res.status(500).json({ error: "Gagal reset password BK" });
   }
