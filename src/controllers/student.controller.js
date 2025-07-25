@@ -25,7 +25,9 @@ const getAllSiswa = async (req, res) => {
 const createSiswa = async (req, res) => {
   const { nis, name, classroomId } = req.body;
   const email = `${nis}@smk14.sch.id`;
-  const password = "smkn14garut";
+  const defaultPassword = "smkn14garut";
+  const bcrypt = require("bcrypt");
+  const hashedPassword = await bcrypt.hash(defaultPassword, 10);
   try {
     // Cek apakah NIS sudah ada
     const nisExist = await prisma.student.findUnique({
@@ -35,7 +37,7 @@ const createSiswa = async (req, res) => {
       return res.status(400).json({ error: "NIS sudah ada" });
     }
     const user = await prisma.user.create({
-      data: { name, email, password, role: "siswa" },
+      data: { name, email, password: hashedPassword, role: "siswa" },
     });
     const student = await prisma.student.create({
       data: {
@@ -101,10 +103,12 @@ const importSiswa = async (req, res) => {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const siswaList = XLSX.utils.sheet_to_json(sheet);
 
+    const bcrypt = require("bcrypt");
     for (const siswa of siswaList) {
       const { nis, name, kelas } = siswa;
       const email = `${nis}@smk14.sch.id`;
-      const password = "smkn14garut";
+      const defaultPassword = "smkn14garut";
+      const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
       // Cari kelas berdasarkan nama
       let classroom = await prisma.classroom.findUnique({
@@ -113,7 +117,7 @@ const importSiswa = async (req, res) => {
       // Buat user dan student
       await prisma.user
         .create({
-          data: { name, email, password, role: "siswa" },
+          data: { name, email, password: hashedPassword, role: "siswa" },
         })
         .then(async (user) => {
           await prisma.student.create({

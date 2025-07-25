@@ -54,8 +54,12 @@ const updateTeacher = async (req, res) => {
 
 const deleteTeacher = async (req, res) => {
   const { id } = req.params;
-  await prisma.user.delete({ where: { id } });
-  res.json({ message: "Guru berhasil dihapus" });
+  try {
+    await prisma.user.delete({ where: { id: parseInt(id) } });
+    res.json({ message: "Guru berhasil dihapus" });
+  } catch (err) {
+    res.status(500).json({ error: "Gagal hapus guru" });
+  }
 };
 
 // Ambil detail guru berdasarkan ID
