@@ -25,7 +25,7 @@ const createBK = async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role: "BK",
+      role: "bk",
     },
   });
   res.status(201).json(newBK);
@@ -53,7 +53,7 @@ const getBKDetail = async (req, res) => {
     const BK = await prisma.user.findUnique({
       where: { id: parseInt(id) },
     });
-    if (!BK || BK.role !== "BK")
+    if (!BK || BK.role !== "bk")
       return res.status(404).json({ error: "BK tidak ditemukan" });
     res.json(BK);
   } catch (err) {
