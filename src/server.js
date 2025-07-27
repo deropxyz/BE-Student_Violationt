@@ -11,7 +11,6 @@ app.use(
       "http://localhost:5173",
       "https://smk14-production.up.railway.app",
       "https://kesiswaan-smkn14garut.vercel.app",
-      "smkn14-garut.up.railway.app",
     ],
     credentials: true,
   })
