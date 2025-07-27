@@ -20,6 +20,7 @@ app.use(
       "https://smk14-production.up.railway.app",
       "http://192.168.193.229:5173",
       "https://kesiswaan-smkn14garut.vercel.app",
+      "smkn14-garut.up.railway.app",
     ],
     credentials: true,
   })
