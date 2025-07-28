@@ -37,24 +37,6 @@ router.put(
   updateStudentViolation
 );
 
-// Approval dan reject pelanggaran siswa oleh BK/superadmin
-const {
-  approveStudentViolation,
-  rejectStudentViolation,
-} = require("../controllers/studentViolation.controller");
-
-router.put(
-  "/:id/approve",
-  authenticate,
-  requireRole(["bk", "superadmin"]),
-  approveStudentViolation
-);
-router.put(
-  "/:id/reject",
-  authenticate,
-  requireRole(["bk", "superadmin"]),
-  rejectStudentViolation
-);
 router.delete(
   "/:id",
   authenticate,

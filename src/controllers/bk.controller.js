@@ -12,23 +12,31 @@ const getAllBK = async (req, res) => {
 const bcrypt = require("bcrypt");
 
 const createBK = async (req, res) => {
-  const { name, email } = req.body;
+  const { name, email, nip, noHp, alamat } = req.body;
   // Validasi email unik
   const emailExist = await prisma.user.findUnique({ where: { email } });
   if (emailExist) {
     return res.status(400).json({ error: "Email sudah digunakan" });
   }
+
   const defaultPassword = "smkn14@garut";
   const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-  const newBK = await prisma.user.create({
-    data: {
-      name,
-      email,
-      password: hashedPassword,
-      role: "bk",
-    },
-  });
-  res.status(201).json(newBK);
+
+  try {
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        role: "bk",
+      },
+    });
+
+    // Note: BK doesn't have separate model in current schema, but if needed can be added
+    res.status(201).json(user);
+  } catch (err) {
+    res.status(500).json({ error: "Gagal menambah BK" });
+  }
 };
 
 const updateBK = async (req, res) => {

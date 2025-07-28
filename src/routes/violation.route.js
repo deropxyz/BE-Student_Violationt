@@ -9,12 +9,37 @@ const {
   deleteViolation,
 } = require("../controllers/violation.controller");
 
-// Endpoint CRUD data pelanggaran
-router.get("/", authenticate, requireRole(["bk"]), getAllViolations);
-router.get("/:id", authenticate, requireRole(["bk"]), getViolationDetail);
-router.post("/", authenticate, requireRole(["bk"]), createViolation);
-router.put("/:id", authenticate, requireRole(["bk"]), updateViolation);
-router.delete("/:id", authenticate, requireRole(["bk"]), deleteViolation);
+// Endpoint CRUD data pelanggaran - Admin dan BK
+router.get(
+  "/",
+  authenticate,
+  requireRole(["bk", "superadmin"]),
+  getAllViolations
+);
+router.get(
+  "/:id",
+  authenticate,
+  requireRole(["bk", "superadmin"]),
+  getViolationDetail
+);
+router.post(
+  "/",
+  authenticate,
+  requireRole(["bk", "superadmin"]),
+  createViolation
+);
+router.put(
+  "/:id",
+  authenticate,
+  requireRole(["bk", "superadmin"]),
+  updateViolation
+);
+router.delete(
+  "/:id",
+  authenticate,
+  requireRole(["bk", "superadmin"]),
+  deleteViolation
+);
 
 // hanya guru dan bk yang bisa input laporan
 router.post("/lapor", authenticate, requireRole(["guru", "bk"]), (req, res) => {

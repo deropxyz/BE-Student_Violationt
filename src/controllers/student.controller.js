@@ -14,8 +14,18 @@ const getAllSiswa = async (req, res) => {
   try {
     const siswa = await prisma.student.findMany({
       where: filter,
-      include: { user: true, classroom: true },
-      orderBy: { nis: "asc" },
+      include: {
+        user: true,
+        classroom: true,
+        angkatan: true,
+        orangTua: { include: { user: true } },
+        violations: {
+          include: {
+            violation: true,
+          },
+        },
+      },
+      orderBy: { nisn: "asc" },
     });
     res.json(siswa);
   } catch (err) {
@@ -24,18 +34,29 @@ const getAllSiswa = async (req, res) => {
 };
 
 const createSiswa = async (req, res) => {
-  const { nis, name, classroomId } = req.body;
-  const email = `${nis}@smk14.sch.id`;
+  const {
+    nisn,
+    name,
+    gender,
+    tempatLahir,
+    tglLahir,
+    alamat,
+    noHp,
+    classroomId,
+    angkatanId,
+    orangTuaId,
+  } = req.body;
+  const email = `${nisn}@smk14.sch.id`;
   const defaultPassword = "smkn14garut";
   const bcrypt = require("bcrypt");
   const hashedPassword = await bcrypt.hash(defaultPassword, 10);
   try {
-    // Cek apakah NIS sudah ada
-    const nisExist = await prisma.student.findUnique({
-      where: { nis },
+    // Cek apakah NISN sudah ada
+    const nisnExist = await prisma.student.findUnique({
+      where: { nisn },
     });
-    if (nisExist) {
-      return res.status(400).json({ error: "NIS sudah ada" });
+    if (nisnExist) {
+      return res.status(400).json({ error: "NISN sudah ada" });
     }
     const user = await prisma.user.create({
       data: { name, email, password: hashedPassword, role: "siswa" },
@@ -43,16 +64,22 @@ const createSiswa = async (req, res) => {
     const student = await prisma.student.create({
       data: {
         userId: user.id,
-        nis,
-        class: "",
+        nisn,
+        gender,
+        tempatLahir,
+        tglLahir: new Date(tglLahir),
+        alamat,
+        noHp,
         classroomId: parseInt(classroomId),
+        angkatanId: parseInt(angkatanId),
+        orangTuaId: orangTuaId ? parseInt(orangTuaId) : null,
       },
     });
     res.json(student);
   } catch (err) {
-    // Handle error unik NIS dari Prisma
-    if (err.code === "P2002" && err.meta?.target?.includes("nis")) {
-      return res.status(400).json({ error: "NIS sudah ada" });
+    // Handle error unik NISN dari Prisma
+    if (err.code === "P2002" && err.meta?.target?.includes("nisn")) {
+      return res.status(400).json({ error: "NISN sudah ada" });
     }
     res.status(500).json({ error: "Gagal menambah siswa" });
   }
@@ -60,13 +87,31 @@ const createSiswa = async (req, res) => {
 
 const updateSiswa = async (req, res) => {
   const { id } = req.params;
-  const { nis, name, classroomId } = req.body;
+  const {
+    nisn,
+    name,
+    gender,
+    tempatLahir,
+    tglLahir,
+    alamat,
+    noHp,
+    classroomId,
+    angkatanId,
+    orangTuaId,
+  } = req.body;
   try {
     const student = await prisma.student.update({
       where: { id: parseInt(id) },
       data: {
-        nis,
-        classroomId: parseInt(classroomId),
+        nisn,
+        gender,
+        tempatLahir,
+        tglLahir: tglLahir ? new Date(tglLahir) : undefined,
+        alamat,
+        noHp,
+        classroomId: classroomId ? parseInt(classroomId) : undefined,
+        angkatanId: angkatanId ? parseInt(angkatanId) : undefined,
+        orangTuaId: orangTuaId ? parseInt(orangTuaId) : null,
       },
     });
     // Update nama user jika ada
@@ -159,11 +204,16 @@ const searchSiswa = async (req, res) => {
     const siswa = await prisma.student.findMany({
       where: {
         OR: [
-          { nis: { contains: q || "", mode: "insensitive" } },
+          { nisn: { contains: q || "", mode: "insensitive" } },
           { user: { name: { contains: q || "", mode: "insensitive" } } },
         ],
       },
-      include: { user: true, classroom: true },
+      include: {
+        user: true,
+        classroom: true,
+        angkatan: true,
+        orangTua: { include: { user: true } },
+      },
     });
     res.json(siswa);
   } catch (err) {

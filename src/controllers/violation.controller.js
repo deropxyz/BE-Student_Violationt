@@ -28,10 +28,16 @@ const getViolationDetail = async (req, res) => {
 
 // Tambah pelanggaran
 const createViolation = async (req, res) => {
-  const { name, category, point } = req.body;
+  const { nama, kategori, jenis, point, tipe } = req.body;
   try {
     const violation = await prisma.violation.create({
-      data: { name, category, point },
+      data: {
+        nama,
+        kategori,
+        jenis,
+        point: parseInt(point),
+        tipe: tipe || "pelanggaran",
+      },
     });
     res.status(201).json(violation);
   } catch (err) {
@@ -42,11 +48,17 @@ const createViolation = async (req, res) => {
 // Update pelanggaran
 const updateViolation = async (req, res) => {
   const { id } = req.params;
-  const { name, category, point } = req.body;
+  const { nama, kategori, jenis, point, tipe } = req.body;
   try {
     const violation = await prisma.violation.update({
       where: { id: parseInt(id) },
-      data: { name, category, point },
+      data: {
+        nama,
+        kategori,
+        jenis,
+        point: point ? parseInt(point) : undefined,
+        tipe,
+      },
     });
     res.json(violation);
   } catch (err) {

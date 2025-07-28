@@ -6,6 +6,11 @@ const getAllClassroom = async (req, res) => {
   try {
     const classrooms = await prisma.classroom.findMany({
       include: {
+        waliKelas: {
+          include: {
+            user: true,
+          },
+        },
         students: {
           include: {
             user: {
@@ -23,10 +28,14 @@ const getAllClassroom = async (req, res) => {
 
 // Tambah kelas baru
 const createClassroom = async (req, res) => {
-  const { name, batchYear } = req.body;
+  const { kodeKelas, namaKelas, waliKelasId } = req.body;
   try {
     const newClassroom = await prisma.classroom.create({
-      data: { name, batchYear },
+      data: {
+        kodeKelas,
+        namaKelas,
+        waliKelasId: parseInt(waliKelasId),
+      },
     });
     res.status(201).json(newClassroom);
   } catch (error) {
@@ -37,11 +46,15 @@ const createClassroom = async (req, res) => {
 // Update kelas
 const updateClassroom = async (req, res) => {
   const { id } = req.params;
-  const { name, batchYear } = req.body;
+  const { kodeKelas, namaKelas, waliKelasId } = req.body;
   try {
     const updated = await prisma.classroom.update({
       where: { id: parseInt(id) },
-      data: { name, batchYear },
+      data: {
+        kodeKelas,
+        namaKelas,
+        waliKelasId: waliKelasId ? parseInt(waliKelasId) : undefined,
+      },
     });
     res.json(updated);
   } catch (error) {

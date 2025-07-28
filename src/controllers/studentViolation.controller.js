@@ -41,20 +41,69 @@ const getStudentViolationDetail = async (req, res) => {
 
 // Input laporan pelanggaran siswa
 const createStudentViolation = async (req, res) => {
-  const { studentId, violationId, description, evidenceUrl } = req.body;
+  const { studentId, violationId, tanggal, waktu, deskripsi, evidenceUrl } =
+    req.body;
   try {
+    // Get violation details untuk point
+    const violation = await prisma.violation.findUnique({
+      where: { id: parseInt(violationId) },
+    });
+
+    if (!violation) {
+      return res.status(404).json({ error: "Pelanggaran tidak ditemukan" });
+    }
+
+    // Get current student data
+    const student = await prisma.student.findUnique({
+      where: { id: parseInt(studentId) },
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: "Siswa tidak ditemukan" });
+    }
+
+    // Calculate new score
+    const currentScore = student.totalScore;
+    const newScore =
+      violation.tipe === "pelanggaran"
+        ? currentScore + violation.point
+        : currentScore - violation.point;
+
+    // Create violation record
     const report = await prisma.studentViolation.create({
       data: {
         studentId: parseInt(studentId),
         violationId: parseInt(violationId),
         reporterId: req.user.id,
-        description,
+        tanggal: tanggal ? new Date(tanggal) : new Date(),
+        waktu: waktu ? new Date(waktu) : null,
+        deskripsi,
         evidenceUrl,
-        status: "pending",
+        pointSaat: violation.point,
       },
     });
+
+    // Update student total score
+    await prisma.student.update({
+      where: { id: parseInt(studentId) },
+      data: { totalScore: Math.max(0, newScore) }, // Ensure score doesn't go below 0
+    });
+
+    // Create score history
+    await prisma.scoreHistory.create({
+      data: {
+        studentId: parseInt(studentId),
+        pointLama: currentScore,
+        pointBaru: Math.max(0, newScore),
+        alasan: `${
+          violation.tipe === "pelanggaran" ? "Pelanggaran" : "Prestasi"
+        }: ${violation.nama}`,
+      },
+    });
+
     res.status(201).json(report);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Gagal input pelanggaran siswa" });
   }
 };
@@ -62,11 +111,16 @@ const createStudentViolation = async (req, res) => {
 // Update laporan pelanggaran siswa
 const updateStudentViolation = async (req, res) => {
   const { id } = req.params;
-  const { status, description, evidenceUrl } = req.body;
+  const { tanggal, waktu, deskripsi, evidenceUrl } = req.body;
   try {
     const violation = await prisma.studentViolation.update({
       where: { id: parseInt(id) },
-      data: { status, description, evidenceUrl },
+      data: {
+        tanggal: tanggal ? new Date(tanggal) : undefined,
+        waktu: waktu ? new Date(waktu) : undefined,
+        deskripsi,
+        evidenceUrl,
+      },
     });
     res.json(violation);
   } catch (err) {
@@ -85,38 +139,10 @@ const deleteStudentViolation = async (req, res) => {
   }
 };
 
-const approveStudentViolation = async (req, res) => {
-  const { id } = req.params;
-  try {
-    const violation = await prisma.studentViolation.update({
-      where: { id: parseInt(id) },
-      data: { status: "approved" },
-    });
-    res.json({ message: "Pelanggaran disetujui", violation });
-  } catch (err) {
-    res.status(500).json({ error: "Gagal approval pelanggaran" });
-  }
-};
-
-const rejectStudentViolation = async (req, res) => {
-  const { id } = req.params;
-  try {
-    const violation = await prisma.studentViolation.update({
-      where: { id: parseInt(id) },
-      data: { status: "rejected" },
-    });
-    res.json({ message: "Pelanggaran ditolak", violation });
-  } catch (err) {
-    res.status(500).json({ error: "Gagal reject pelanggaran" });
-  }
-};
-
 module.exports = {
   getAllStudentViolations,
   getStudentViolationDetail,
   createStudentViolation,
   updateStudentViolation,
   deleteStudentViolation,
-  approveStudentViolation,
-  rejectStudentViolation,
 };

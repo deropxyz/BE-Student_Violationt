@@ -12,6 +12,29 @@ enum Role {
   guru
   bk
   siswa
+  orangtua
+}
+
+enum Gender {
+  L
+  P
+}
+
+enum JenisPelanggaran {
+  kedisiplinan
+  akademik
+  lainnya
+}
+
+enum KategoriPelanggaran {
+  ringan
+  sedang
+  berat
+}
+
+enum TipePoin {
+  pelanggaran
+  prestasi
 }
 
 model User {
@@ -21,52 +44,169 @@ model User {
   password  String
   role      Role
   createdAt DateTime @default(now())
+  isActive  Boolean  @default(true)
 
-  student Student?
-  reports StudentViolation[] @relation("Reporter")
+  student  Student?
+  teacher  Teacher?
+  orangTua OrangTua?
+  reports  StudentViolation[] @relation("Reporter")
 }
 
 model Student {
-  id     Int    @id @default(autoincrement())
-  user   User   @relation(fields: [userId], references: [id])
-  userId Int    @unique
-  nis    String @unique
-  class  String
+  id          Int       @id @default(autoincrement())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      Int       @unique
+  nisn        String    @unique
+  gender      Gender
+  tempatLahir String
+  tglLahir    DateTime
+  alamat      String
+  noHp        String?
+  totalScore  Int       @default(0)
+  isArchived  Boolean   @default(false)
+  archivedAt  DateTime?
 
   classroom   Classroom @relation(fields: [classroomId], references: [id])
   classroomId Int
+  angkatan    Angkatan  @relation(fields: [angkatanId], references: [id])
+  angkatanId  Int
+  orangTua    OrangTua? @relation(fields: [orangTuaId], references: [id])
+  orangTuaId  Int?
 
-  violations StudentViolation[]
+  violations    StudentViolation[]
+  notifications Notification[]
+}
+
+model Teacher {
+  id     Int     @id @default(autoincrement())
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int     @unique
+  nip    String  @unique
+  noHp   String?
+  alamat String?
+
+  classrooms Classroom[] @relation("WaliKelas")
+}
+
+model OrangTua {
+  id        Int     @id @default(autoincrement())
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int     @unique
+  noHp      String?
+  alamat    String?
+  pekerjaan String?
+
+  children Student[]
 }
 
 model Classroom {
-  id       Int       @id @default(autoincrement())
-  name     String    @unique
+  id          Int     @id @default(autoincrement())
+  kodeKelas   String  @unique
+  namaKelas   String
+  jmlSiswa    Int     @default(0)
+  waliKelas   Teacher @relation("WaliKelas", fields: [waliKelasId], references: [id])
+  waliKelasId Int
+
+  students Student[]
+}
+
+model Angkatan {
+  id        Int       @id @default(autoincrement())
+  tahun     String    @unique
+  lulusDate DateTime?
+
   students Student[]
 }
 
 model Violation {
-  id       Int    @id @default(autoincrement())
-  name     String
-  category String
-  point    Int
+  id        Int                 @id @default(autoincrement())
+  nama      String
+  kategori  KategoriPelanggaran
+  jenis     JenisPelanggaran
+  point     Int
+  tipe      TipePoin            @default(pelanggaran)
+  isActive  Boolean             @default(true)
+  createdAt DateTime            @default(now())
 
   records StudentViolation[]
 }
 
 model StudentViolation {
+  id          Int       @id @default(autoincrement())
+  student     Student   @relation(fields: [studentId], references: [id])
+  studentId   Int
+  violation   Violation @relation(fields: [violationId], references: [id])
+  violationId Int
+  reporter    User      @relation("Reporter", fields: [reporterId], references: [id])
+  reporterId  Int
+
+  tanggal     DateTime  @default(now())
+  waktu       DateTime? // waktu kejadian jika berbeda
+  deskripsi   String?
+  evidenceUrl String?
+  pointSaat   Int // point saat pelanggaran terjadi
+  createdAt   DateTime  @default(now())
+
+  penanganan Penanganan?
+}
+
+model TindakanOtomatis {
+  id           Int     @id @default(autoincrement())
+  minPoint     Int // minimal point untuk trigger
+  maxPoint     Int? // maksimal point (opsional)
+  namaTindakan String // SP1, Panggil Ortu, Drop Out
+  deskripsi    String
+  isActive     Boolean @default(true)
+
+  penanganan Penanganan[]
+}
+
+model Penanganan {
+  id                 Int               @id @default(autoincrement())
+  studentViolation   StudentViolation  @relation(fields: [studentViolationId], references: [id])
+  studentViolationId Int               @unique
+  tindakanOtomatis   TindakanOtomatis? @relation(fields: [tindakanOtomatisId], references: [id])
+  tindakanOtomatisId Int?
+
+  jenisPenanganan   String
+  deskripsi         String
+  tanggalPenanganan DateTime @default(now())
+  penanggungJawab   String
+  statusSelesai     Boolean  @default(false)
+  catatanTambahan   String?
+}
+
+model Notification {
   id        Int     @id @default(autoincrement())
   student   Student @relation(fields: [studentId], references: [id])
   studentId Int
 
-  violation   Violation @relation(fields: [violationId], references: [id])
-  violationId Int
+  judul     String
+  pesan     String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
 
-  reporter   User @relation("Reporter", fields: [reporterId], references: [id])
-  reporterId Int
+model KenaikanKelas {
+  id            Int      @id @default(autoincrement())
+  tahunAjaran   String
+  tanggalProses DateTime @default(now())
+  deskripsi     String?
 
-  date        DateTime @default(now())
-  description String
-  evidenceUrl String?
-  status      String   @default("pending")
+  // Data untuk tracking kenaikan kelas
+  totalSiswa Int
+  sukses     Int
+  gagal      Int
+
+  createdAt DateTime @default(now())
+}
+
+// Tabel untuk menyimpan histori perubahan score siswa
+model ScoreHistory {
+  id        Int      @id @default(autoincrement())
+  studentId Int
+  pointLama Int
+  pointBaru Int
+  alasan    String // "Pelanggaran", "Prestasi", "Reset Kelas", etc
+  createdAt DateTime @default(now())
 }
