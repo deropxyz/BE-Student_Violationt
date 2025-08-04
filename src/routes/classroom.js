@@ -7,6 +7,7 @@ const { authenticate, requireRole } = require("../middlewares/auth.middleware");
 
 // CRUD Kelas
 router.get("/", classroomController.getAllClassroom);
+router.get("/available-teachers", classroomController.getAvailableTeachers);
 
 router.post("/", classroomController.createClassroom);
 router.put("/:id", classroomController.updateClassroom);

@@ -105,7 +105,7 @@ model Classroom {
   namaKelas   String
   jmlSiswa    Int     @default(0)
   waliKelas   Teacher @relation("WaliKelas", fields: [waliKelasId], references: [id])
-  waliKelasId Int
+  waliKelasId Int     @unique // Setiap guru hanya bisa menjadi wali kelas untuk satu kelas
 
   students Student[]
 }

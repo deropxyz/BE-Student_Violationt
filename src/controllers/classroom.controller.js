@@ -30,6 +30,32 @@ const getAllClassroom = async (req, res) => {
 const createClassroom = async (req, res) => {
   const { kodeKelas, namaKelas, waliKelasId } = req.body;
   try {
+    // Validasi: Cek apakah guru sudah menjadi wali kelas di kelas lain
+    if (waliKelasId) {
+      const existingWaliKelas = await prisma.classroom.findFirst({
+        where: { waliKelasId: parseInt(waliKelasId) },
+      });
+
+      if (existingWaliKelas) {
+        return res.status(400).json({
+          message: "Guru sudah menjadi wali kelas di kelas lain",
+          error: "Satu guru hanya bisa menjadi wali kelas untuk satu kelas",
+        });
+      }
+    }
+
+    // Validasi: Cek apakah kode kelas sudah ada
+    const existingKodeKelas = await prisma.classroom.findFirst({
+      where: { kodeKelas },
+    });
+
+    if (existingKodeKelas) {
+      return res.status(400).json({
+        message: "Kode kelas sudah digunakan",
+        error: "Silakan gunakan kode kelas yang berbeda",
+      });
+    }
+
     const newClassroom = await prisma.classroom.create({
       data: {
         kodeKelas,
@@ -48,6 +74,40 @@ const updateClassroom = async (req, res) => {
   const { id } = req.params;
   const { kodeKelas, namaKelas, waliKelasId } = req.body;
   try {
+    // Validasi: Cek apakah guru sudah menjadi wali kelas di kelas lain (kecuali kelas yang sedang diupdate)
+    if (waliKelasId) {
+      const existingWaliKelas = await prisma.classroom.findFirst({
+        where: {
+          waliKelasId: parseInt(waliKelasId),
+          id: { not: parseInt(id) }, // Exclude kelas yang sedang diupdate
+        },
+      });
+
+      if (existingWaliKelas) {
+        return res.status(400).json({
+          message: "Guru sudah menjadi wali kelas di kelas lain",
+          error: "Satu guru hanya bisa menjadi wali kelas untuk satu kelas",
+        });
+      }
+    }
+
+    // Validasi: Cek apakah kode kelas sudah ada (kecuali kelas yang sedang diupdate)
+    if (kodeKelas) {
+      const existingKodeKelas = await prisma.classroom.findFirst({
+        where: {
+          kodeKelas,
+          id: { not: parseInt(id) }, // Exclude kelas yang sedang diupdate
+        },
+      });
+
+      if (existingKodeKelas) {
+        return res.status(400).json({
+          message: "Kode kelas sudah digunakan",
+          error: "Silakan gunakan kode kelas yang berbeda",
+        });
+      }
+    }
+
     const updated = await prisma.classroom.update({
       where: { id: parseInt(id) },
       data: {
@@ -134,6 +194,42 @@ const moveStudentsToNewClass = async (req, res) => {
   }
 };
 
+// Ambil daftar guru yang belum menjadi wali kelas
+const getAvailableTeachers = async (req, res) => {
+  try {
+    // Ambil semua ID guru yang sudah menjadi wali kelas
+    const occupiedTeachers = await prisma.classroom.findMany({
+      select: { waliKelasId: true },
+      where: { waliKelasId: { not: null } },
+    });
+
+    const occupiedTeacherIds = occupiedTeachers.map(
+      (classroom) => classroom.waliKelasId
+    );
+
+    // Ambil guru yang belum menjadi wali kelas
+    const availableTeachers = await prisma.teacher.findMany({
+      where: {
+        id: { notIn: occupiedTeacherIds },
+      },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    res.json(availableTeachers);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Gagal mengambil data guru tersedia", error });
+  }
+};
+
 module.exports = {
   getAllClassroom,
   createClassroom,
@@ -142,4 +238,5 @@ module.exports = {
   assignStudentToClass,
   getStudentsInClass,
   moveStudentsToNewClass,
+  getAvailableTeachers,
 };
