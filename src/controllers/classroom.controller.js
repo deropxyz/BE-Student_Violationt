@@ -211,16 +211,18 @@ const getAvailableTeachers = async (req, res) => {
     });
 
     // Filter guru yang belum menjadi wali kelas (classrooms array kosong)
-    const availableTeachers = allTeachers.filter(teacher => teacher.classrooms.length === 0);
+    const availableTeachers = allTeachers.filter(
+      (teacher) => teacher.classrooms.length === 0
+    );
 
     // Remove classrooms dari response untuk cleaner output
-    const response = availableTeachers.map(teacher => ({
+    const response = availableTeachers.map((teacher) => ({
       id: teacher.id,
       userId: teacher.userId,
       nip: teacher.nip,
       noHp: teacher.noHp,
       alamat: teacher.alamat,
-      user: teacher.user
+      user: teacher.user,
     }));
 
     res.json(response);
@@ -228,7 +230,10 @@ const getAvailableTeachers = async (req, res) => {
     console.error("Error in getAvailableTeachers:", error);
     res
       .status(500)
-      .json({ message: "Gagal mengambil data guru tersedia", error: error.message });
+      .json({
+        message: "Gagal mengambil data guru tersedia",
+        error: error.message,
+      });
   }
 };
 

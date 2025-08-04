@@ -1074,11 +1074,13 @@
 ### Important Notes:
 
 #### **Wali Kelas Constraint:**
+
 - ✅ Satu guru hanya bisa menjadi wali kelas untuk satu kelas
 - ✅ Constraint di level database dan aplikasi
 - ✅ Endpoint `GET /api/classrooms/available-teachers` untuk guru yang tersedia
 
 #### **Achievement Categories:**
+
 - **akademik**: Prestasi dalam bidang akademik (olimpiade, lomba akademik)
 - **non_akademik**: Prestasi non-akademik (teknologi, coding, desain)
 - **olahraga**: Prestasi dalam bidang olahraga (futsal, basket, voli)
@@ -1086,6 +1088,7 @@
 - **lainnya**: Prestasi lainnya (siswa teladan, siswa berprestasi)
 
 #### **Score Logic:**
+
 - **Total Score** menggunakan satu field di model Student
 - **Pelanggaran**: Menambah poin (semakin tinggi = semakin buruk)
 - **Prestasi**: Mengurangi poin (reward untuk prestasi)
@@ -1100,7 +1103,7 @@
 ### Auto-generated Fields:
 
 - **Student Email**: `{nisn}@smk14.sch.id`
-- **Score Calculation**: 
+- **Score Calculation**:
   - Pelanggaran: `totalScore + violationPoint`
   - Prestasi: `max(0, totalScore - achievementPoint)`
 - **Notifications**: Auto-created when violations/achievements are reported
@@ -1139,6 +1142,7 @@
 ### Recent Updates:
 
 #### **[2025-08-04] Separation of Violations and Achievements**
+
 - ✅ `20250804143210_separate_violation_achievement`: Pisahkan violation dan achievement
 - ✅ `20250804143534_add_tanggal_to_score_history`: Tambah field tanggal di ScoreHistory
 - ✅ Model Achievement dan StudentAchievement baru
@@ -1146,13 +1150,15 @@
 - ✅ Updated score calculation logic
 
 #### **[2025-08-04] Wali Kelas Constraint**
+
 - ✅ `20250804134017_add_unique_wali_kelas_constraint`: Unique constraint waliKelasId
 - ✅ Validasi di controller dan database level
 - ✅ Endpoint available teachers
 
 ### API Endpoints Summary:
+
 - **Violations**: 5 endpoints (GET, POST, PUT, DELETE, GET/:id)
-- **Achievements**: 5 endpoints (GET, POST, PUT, DELETE, GET/:id)  
+- **Achievements**: 5 endpoints (GET, POST, PUT, DELETE, GET/:id)
 - **Student Violations**: 5 endpoints (GET, POST, PUT, DELETE, GET/:id)
 - **Student Achievements**: 5 endpoints (GET, POST, PUT, DELETE, GET/:id)
 - **Classrooms**: 7 endpoints (termasuk available-teachers)
