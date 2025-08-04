@@ -5,7 +5,14 @@ const prisma = new PrismaClient();
 const getAllAchievements = async (req, res) => {
   try {
     const achievements = await prisma.achievement.findMany({
-      orderBy: { nama: "asc" },
+      orderBy: [
+        {
+          kategori: "asc",
+        },
+        {
+          point: "asc",
+        },
+      ],
     });
     res.json(achievements);
   } catch (err) {

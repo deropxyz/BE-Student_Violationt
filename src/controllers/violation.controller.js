@@ -4,7 +4,16 @@ const prisma = new PrismaClient();
 // Ambil semua data pelanggaran
 const getAllViolations = async (req, res) => {
   try {
-    const violations = await prisma.violation.findMany();
+    const violations = await prisma.violation.findMany({
+      orderBy: [
+        {
+          kategori: "asc",
+        },
+        {
+          point: "asc",
+        },
+      ],
+    });
     res.json(violations);
   } catch (err) {
     res.status(500).json({ error: "Gagal mengambil data pelanggaran" });
