@@ -197,21 +197,8 @@ const moveStudentsToNewClass = async (req, res) => {
 // Ambil daftar guru yang belum menjadi wali kelas
 const getAvailableTeachers = async (req, res) => {
   try {
-    // Ambil semua ID guru yang sudah menjadi wali kelas
-    const occupiedTeachers = await prisma.classroom.findMany({
-      select: { waliKelasId: true },
-      where: { waliKelasId: { not: null } },
-    });
-
-    const occupiedTeacherIds = occupiedTeachers.map(
-      (classroom) => classroom.waliKelasId
-    );
-
-    // Ambil guru yang belum menjadi wali kelas
-    const availableTeachers = await prisma.teacher.findMany({
-      where: {
-        id: { notIn: occupiedTeacherIds },
-      },
+    // Ambil semua guru dengan data classroom
+    const allTeachers = await prisma.teacher.findMany({
       include: {
         user: {
           select: {
@@ -219,14 +206,29 @@ const getAvailableTeachers = async (req, res) => {
             email: true,
           },
         },
+        classrooms: true, // untuk cek apakah sudah jadi wali kelas
       },
     });
 
-    res.json(availableTeachers);
+    // Filter guru yang belum menjadi wali kelas (classrooms array kosong)
+    const availableTeachers = allTeachers.filter(teacher => teacher.classrooms.length === 0);
+
+    // Remove classrooms dari response untuk cleaner output
+    const response = availableTeachers.map(teacher => ({
+      id: teacher.id,
+      userId: teacher.userId,
+      nip: teacher.nip,
+      noHp: teacher.noHp,
+      alamat: teacher.alamat,
+      user: teacher.user
+    }));
+
+    res.json(response);
   } catch (error) {
+    console.error("Error in getAvailableTeachers:", error);
     res
       .status(500)
-      .json({ message: "Gagal mengambil data guru tersedia", error });
+      .json({ message: "Gagal mengambil data guru tersedia", error: error.message });
   }
 };
 

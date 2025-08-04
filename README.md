@@ -361,6 +361,28 @@
 - **Endpoint**: `GET /api/classrooms/:id/students`
 - **Access**: All roles
 
+### Get Available Teachers (for Wali Kelas)
+
+- **Endpoint**: `GET /api/classrooms/available-teachers`
+- **Access**: Superadmin
+- **Description**: Mengambil daftar guru yang belum menjadi wali kelas
+- **Response**:
+  ```json
+  [
+    {
+      "id": 2,
+      "userId": 3,
+      "nip": "198703152011012002",
+      "noHp": "081234567891",
+      "alamat": "Jl. Sudirman No. 456, Garut",
+      "user": {
+        "name": "Siti Nurhaliza, S.Kom",
+        "email": "siti.nurhaliza@smk14.com"
+      }
+    }
+  ]
+  ```
+
 ### Assign Student to Class
 
 - **Endpoint**: `PUT /api/classrooms/:classroomId/assign/:studentId`
@@ -422,6 +444,150 @@
 
 ---
 
+## 🏆 Achievement Management (Prestasi)
+
+### Get All Achievements
+
+- **Endpoint**: `GET /api/achievements`
+- **Access**: All roles
+- **Response**:
+  ```json
+  [
+    {
+      "id": 1,
+      "nama": "Juara 1 Olimpiade Matematika",
+      "kategori": "akademik",
+      "point": 50,
+      "isActive": true,
+      "createdAt": "2025-08-04T14:40:52.648Z"
+    },
+    {
+      "id": 2,
+      "nama": "Juara 1 Futsal",
+      "kategori": "olahraga",
+      "point": 40,
+      "isActive": true,
+      "createdAt": "2025-08-04T14:40:55.972Z"
+    }
+  ]
+  ```
+
+### Create Achievement
+
+- **Endpoint**: `POST /api/achievements`
+- **Access**: Guru, Superadmin
+- **Payload**:
+  ```json
+  {
+    "nama": "Juara 1 Olimpiade Biologi",
+    "kategori": "akademik", // "akademik", "non_akademik", "olahraga", "kesenian", "lainnya"
+    "point": 50
+  }
+  ```
+
+### Update Achievement
+
+- **Endpoint**: `PUT /api/achievements/:id`
+- **Access**: Guru, Superadmin
+- **Payload**: Same as create
+
+### Delete Achievement
+
+- **Endpoint**: `DELETE /api/achievements/:id`
+- **Access**: Superadmin only
+
+### Get Achievement Detail
+
+- **Endpoint**: `GET /api/achievements/:id`
+- **Access**: All roles
+
+---
+
+## 🌟 Student Achievement Reports (Laporan Prestasi)
+
+### Get All Student Achievements
+
+- **Endpoint**: `GET /api/student-achievements`
+- **Access**: All authenticated users
+- **Response**:
+  ```json
+  [
+    {
+      "id": 1,
+      "studentId": 1,
+      "achievementId": 1,
+      "reporterId": 2,
+      "tanggal": "2025-08-04T14:30:00.000Z",
+      "waktu": null,
+      "deskripsi": "Meraih juara 1 olimpiade matematika tingkat kabupaten",
+      "evidenceUrl": "https://example.com/certificate.jpg",
+      "pointSaat": 50,
+      "createdAt": "2025-08-04T14:35:00.000Z",
+      "student": {
+        "user": {
+          "name": "Budi Siswa"
+        },
+        "nisn": "2024001001",
+        "classroom": {
+          "namaKelas": "XII RPL 1"
+        }
+      },
+      "achievement": {
+        "nama": "Juara 1 Olimpiade Matematika",
+        "kategori": "akademik",
+        "point": 50
+      },
+      "reporter": {
+        "name": "Ahmad Guru"
+      }
+    }
+  ]
+  ```
+
+### Create Student Achievement Report
+
+- **Endpoint**: `POST /api/student-achievements`
+- **Access**: Guru, BK
+- **Payload**:
+  ```json
+  {
+    "studentId": 1,
+    "achievementId": 1,
+    "tanggal": "2025-08-04", // optional, default: today
+    "waktu": "2025-08-04T10:00:00.000Z", // optional
+    "deskripsi": "Meraih juara 1 olimpiade matematika tingkat kabupaten",
+    "evidenceUrl": "https://example.com/certificate.jpg" // optional
+  }
+  ```
+- **Note**: Akan otomatis mengurangi total score siswa dengan point prestasi (minimum 0)
+
+### Update Student Achievement
+
+- **Endpoint**: `PUT /api/student-achievements/:id`
+- **Access**: Guru, BK
+- **Payload**:
+  ```json
+  {
+    "tanggal": "2025-08-04",
+    "waktu": "2025-08-04T10:00:00.000Z",
+    "deskripsi": "Meraih juara 1 olimpiade matematika tingkat kabupaten (updated)",
+    "evidenceUrl": "https://example.com/certificate-new.jpg"
+  }
+  ```
+
+### Delete Student Achievement
+
+- **Endpoint**: `DELETE /api/student-achievements/:id`
+- **Access**: BK, Superadmin
+- **Note**: Akan mengembalikan point prestasi ke total score siswa
+
+### Get Student Achievement Detail
+
+- **Endpoint**: `GET /api/student-achievements/:id`
+- **Access**: All authenticated users
+
+---
+
 ## ⚠️ Violation Management
 
 ### Get All Violations
@@ -437,7 +603,6 @@
       "kategori": "ringan", // "ringan", "sedang", "berat"
       "jenis": "kedisiplinan", // "kedisiplinan", "akademik", "lainnya"
       "point": 10,
-      "tipe": "pelanggaran", // "pelanggaran", "prestasi"
       "isActive": true,
       "createdAt": "2024-07-28T00:00:00.000Z"
     }
@@ -454,8 +619,7 @@
     "nama": "Terlambat ke sekolah",
     "kategori": "ringan",
     "jenis": "kedisiplinan",
-    "point": 10,
-    "tipe": "pelanggaran"
+    "point": 10
   }
   ```
 
@@ -533,7 +697,7 @@
     "evidenceUrl": "https://example.com/evidence.jpg" // optional
   }
   ```
-- **Note**: Akan otomatis menghitung dan update total score siswa
+- **Note**: Akan otomatis menghitung dan update total score siswa (menambah poin pelanggaran)
 
 ### Update Student Violation
 
@@ -875,7 +1039,9 @@
 #### **BK (Bimbingan Konseling)**
 
 - ✅ Violation management (CRUD)
+- ✅ Achievement management (CRUD)
 - ✅ Student violation reports (view, create, update, delete)
+- ✅ Student achievement reports (view, create, update, delete)
 - ✅ Automatic action management
 - ✅ Reports and statistics
 - ✅ Student monitoring
@@ -883,25 +1049,47 @@
 #### **Guru (Teacher)**
 
 - ✅ Create student violation reports
+- ✅ Create student achievement reports
+- ✅ Achievement management (create, update)
 - ✅ View student data
 - ✅ View class reports (if wali kelas)
 - ✅ Basic statistics access
 
 #### **Siswa (Student)**
 
-- ✅ View own violations and score
-- ✅ View own notifications
+- ✅ View own violations and achievements
+- ✅ View own score and notifications
 - ✅ Dashboard access
 
 #### **Orang Tua (Parent)**
 
-- ✅ View child's violations and score
-- ✅ View child's notifications
+- ✅ View child's violations and achievements
+- ✅ View child's score and notifications
 - ✅ Monitor child's progress
 
 ---
 
 ## 📋 Important Notes
+
+### Important Notes:
+
+#### **Wali Kelas Constraint:**
+- ✅ Satu guru hanya bisa menjadi wali kelas untuk satu kelas
+- ✅ Constraint di level database dan aplikasi
+- ✅ Endpoint `GET /api/classrooms/available-teachers` untuk guru yang tersedia
+
+#### **Achievement Categories:**
+- **akademik**: Prestasi dalam bidang akademik (olimpiade, lomba akademik)
+- **non_akademik**: Prestasi non-akademik (teknologi, coding, desain)
+- **olahraga**: Prestasi dalam bidang olahraga (futsal, basket, voli)
+- **kesenian**: Prestasi dalam bidang seni dan budaya (paduan suara, drama)
+- **lainnya**: Prestasi lainnya (siswa teladan, siswa berprestasi)
+
+#### **Score Logic:**
+- **Total Score** menggunakan satu field di model Student
+- **Pelanggaran**: Menambah poin (semakin tinggi = semakin buruk)
+- **Prestasi**: Mengurangi poin (reward untuk prestasi)
+- **Minimum Score**: 0 (tidak bisa negatif)
 
 ### Default Credentials:
 
@@ -912,8 +1100,10 @@
 ### Auto-generated Fields:
 
 - **Student Email**: `{nisn}@smk14.sch.id`
-- **Score Calculation**: Automatic when violations are reported
-- **Notifications**: Auto-created when violations are reported
+- **Score Calculation**: 
+  - Pelanggaran: `totalScore + violationPoint`
+  - Prestasi: `max(0, totalScore - achievementPoint)`
+- **Notifications**: Auto-created when violations/achievements are reported
 
 ### Date Formats:
 
@@ -941,3 +1131,28 @@
   "data": {}
 }
 ```
+
+---
+
+## 🔄 Migration History
+
+### Recent Updates:
+
+#### **[2025-08-04] Separation of Violations and Achievements**
+- ✅ `20250804143210_separate_violation_achievement`: Pisahkan violation dan achievement
+- ✅ `20250804143534_add_tanggal_to_score_history`: Tambah field tanggal di ScoreHistory
+- ✅ Model Achievement dan StudentAchievement baru
+- ✅ Enum KategoriPrestasi (akademik, non_akademik, olahraga, kesenian, lainnya)
+- ✅ Updated score calculation logic
+
+#### **[2025-08-04] Wali Kelas Constraint**
+- ✅ `20250804134017_add_unique_wali_kelas_constraint`: Unique constraint waliKelasId
+- ✅ Validasi di controller dan database level
+- ✅ Endpoint available teachers
+
+### API Endpoints Summary:
+- **Violations**: 5 endpoints (GET, POST, PUT, DELETE, GET/:id)
+- **Achievements**: 5 endpoints (GET, POST, PUT, DELETE, GET/:id)  
+- **Student Violations**: 5 endpoints (GET, POST, PUT, DELETE, GET/:id)
+- **Student Achievements**: 5 endpoints (GET, POST, PUT, DELETE, GET/:id)
+- **Classrooms**: 7 endpoints (termasuk available-teachers)
