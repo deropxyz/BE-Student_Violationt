@@ -62,12 +62,9 @@ const createStudentViolation = async (req, res) => {
       return res.status(404).json({ error: "Siswa tidak ditemukan" });
     }
 
-    // Calculate new score
+    // Calculate new score (pelanggaran menambah poin)
     const currentScore = student.totalScore;
-    const newScore =
-      violation.tipe === "pelanggaran"
-        ? currentScore + violation.point
-        : currentScore - violation.point;
+    const newScore = currentScore + violation.point;
 
     // Create violation record
     const report = await prisma.studentViolation.create({
@@ -86,7 +83,7 @@ const createStudentViolation = async (req, res) => {
     // Update student total score
     await prisma.student.update({
       where: { id: parseInt(studentId) },
-      data: { totalScore: Math.max(0, newScore) }, // Ensure score doesn't go below 0
+      data: { totalScore: newScore },
     });
 
     // Create score history
@@ -94,10 +91,9 @@ const createStudentViolation = async (req, res) => {
       data: {
         studentId: parseInt(studentId),
         pointLama: currentScore,
-        pointBaru: Math.max(0, newScore),
-        alasan: `${
-          violation.tipe === "pelanggaran" ? "Pelanggaran" : "Prestasi"
-        }: ${violation.nama}`,
+        pointBaru: newScore,
+        alasan: `Pelanggaran: ${violation.nama}`,
+        tanggal: new Date(),
       },
     });
 

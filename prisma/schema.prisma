@@ -32,9 +32,12 @@ enum KategoriPelanggaran {
   berat
 }
 
-enum TipePoin {
-  pelanggaran
-  prestasi
+enum KategoriPrestasi {
+  akademik
+  non_akademik
+  olahraga
+  kesenian
+  lainnya
 }
 
 model User {
@@ -46,10 +49,11 @@ model User {
   createdAt DateTime @default(now())
   isActive  Boolean  @default(true)
 
-  student  Student?
-  teacher  Teacher?
-  orangTua OrangTua?
-  reports  StudentViolation[] @relation("Reporter")
+  student            Student?
+  teacher            Teacher?
+  orangTua           OrangTua?
+  violationReports   StudentViolation[]   @relation("ViolationReporter")
+  achievementReports StudentAchievement[] @relation("AchievementReporter")
 }
 
 model Student {
@@ -74,6 +78,7 @@ model Student {
   orangTuaId  Int?
 
   violations    StudentViolation[]
+  achievements  StudentAchievement[]
   notifications Notification[]
 }
 
@@ -124,11 +129,21 @@ model Violation {
   kategori  KategoriPelanggaran
   jenis     JenisPelanggaran
   point     Int
-  tipe      TipePoin            @default(pelanggaran)
   isActive  Boolean             @default(true)
   createdAt DateTime            @default(now())
 
   records StudentViolation[]
+}
+
+model Achievement {
+  id        Int              @id @default(autoincrement())
+  nama      String
+  kategori  KategoriPrestasi
+  point     Int
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+
+  records StudentAchievement[]
 }
 
 model StudentViolation {
@@ -137,7 +152,7 @@ model StudentViolation {
   studentId   Int
   violation   Violation @relation(fields: [violationId], references: [id])
   violationId Int
-  reporter    User      @relation("Reporter", fields: [reporterId], references: [id])
+  reporter    User      @relation("ViolationReporter", fields: [reporterId], references: [id])
   reporterId  Int
 
   tanggal     DateTime  @default(now())
@@ -148,6 +163,23 @@ model StudentViolation {
   createdAt   DateTime  @default(now())
 
   penanganan Penanganan?
+}
+
+model StudentAchievement {
+  id            Int         @id @default(autoincrement())
+  student       Student     @relation(fields: [studentId], references: [id])
+  studentId     Int
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+  achievementId Int
+  reporter      User        @relation("AchievementReporter", fields: [reporterId], references: [id])
+  reporterId    Int
+
+  tanggal     DateTime  @default(now())
+  waktu       DateTime? // waktu kejadian jika berbeda
+  deskripsi   String?
+  evidenceUrl String?
+  pointSaat   Int // point saat prestasi diberikan
+  createdAt   DateTime  @default(now())
 }
 
 model TindakanOtomatis {
@@ -208,5 +240,6 @@ model ScoreHistory {
   pointLama Int
   pointBaru Int
   alasan    String // "Pelanggaran", "Prestasi", "Reset Kelas", etc
+  tanggal   DateTime @default(now())
   createdAt DateTime @default(now())
 }

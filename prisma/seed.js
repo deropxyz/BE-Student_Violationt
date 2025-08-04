@@ -291,7 +291,7 @@ async function main() {
   }
   console.log("✅ Students created");
 
-  // 8. Create Violations (Pelanggaran dan Prestasi)
+  // 8. Create Violations (Hanya Pelanggaran)
   const violationsData = [
     // Pelanggaran Kedisiplinan
     {
@@ -299,28 +299,24 @@ async function main() {
       kategori: "ringan",
       jenis: "kedisiplinan",
       point: 10,
-      tipe: "pelanggaran",
     },
     {
       nama: "Tidak memakai seragam lengkap",
       kategori: "ringan",
       jenis: "kedisiplinan",
       point: 15,
-      tipe: "pelanggaran",
     },
     {
       nama: "Bolos sekolah",
       kategori: "sedang",
       jenis: "kedisiplinan",
       point: 50,
-      tipe: "pelanggaran",
     },
     {
       nama: "Berkelahi di sekolah",
       kategori: "berat",
       jenis: "kedisiplinan",
       point: 100,
-      tipe: "pelanggaran",
     },
     // Pelanggaran Akademik
     {
@@ -328,29 +324,12 @@ async function main() {
       kategori: "ringan",
       jenis: "akademik",
       point: 5,
-      tipe: "pelanggaran",
     },
     {
       nama: "Menyontek saat ujian",
       kategori: "sedang",
       jenis: "akademik",
       point: 75,
-      tipe: "pelanggaran",
-    },
-    // Prestasi
-    {
-      nama: "Juara 1 Lomba Programming",
-      kategori: "ringan",
-      jenis: "lainnya",
-      point: 50,
-      tipe: "prestasi",
-    },
-    {
-      nama: "Mengikuti kegiatan sosial",
-      kategori: "ringan",
-      jenis: "lainnya",
-      point: 10,
-      tipe: "prestasi",
     },
   ];
 
@@ -383,12 +362,12 @@ async function main() {
       pointSaat: violations[1].point,
     },
     {
-      studentId: students[0].id,
-      violationId: violations[6].id, // Prestasi
-      reporterId: bkUser.id,
-      tanggal: new Date("2024-07-20T10:00:00"),
-      deskripsi: "Meraih juara 1 dalam lomba programming tingkat kabupaten",
-      pointSaat: violations[6].point,
+      studentId: students[2].id,
+      violationId: violations[2].id, // Bolos sekolah
+      reporterId: teachers[2].userId,
+      tanggal: new Date("2024-07-17T08:00:00"),
+      deskripsi: "Tidak masuk sekolah tanpa keterangan",
+      pointSaat: violations[2].point,
     },
   ];
 
@@ -397,23 +376,22 @@ async function main() {
       data: violationRecord,
     });
 
-    // Update student total score
+    // Update student total score (pelanggaran menambah poin)
     const currentStudent = await prisma.student.findUnique({
       where: { id: violationRecord.studentId },
     });
 
-    const violation = violations.find(
-      (v) => v.id === violationRecord.violationId
-    );
-    const newScore =
-      violation.tipe === "pelanggaran"
-        ? currentStudent.totalScore + violation.point
-        : Math.max(0, currentStudent.totalScore - violation.point);
+    const newScore = currentStudent.totalScore + violationRecord.pointSaat;
 
     await prisma.student.update({
       where: { id: violationRecord.studentId },
       data: { totalScore: newScore },
     });
+
+    // Get violation data for history
+    const violation = violations.find(
+      (v) => v.id === violationRecord.violationId
+    );
 
     // Create score history
     await prisma.scoreHistory.create({
@@ -421,9 +399,8 @@ async function main() {
         studentId: violationRecord.studentId,
         pointLama: currentStudent.totalScore,
         pointBaru: newScore,
-        alasan: `${
-          violation.tipe === "pelanggaran" ? "Pelanggaran" : "Prestasi"
-        }: ${violation.nama}`,
+        alasan: `Pelanggaran: ${violation.nama}`,
+        tanggal: new Date(),
       },
     });
 
@@ -431,15 +408,8 @@ async function main() {
     await prisma.notification.create({
       data: {
         studentId: violationRecord.studentId,
-        judul:
-          violation.tipe === "pelanggaran"
-            ? "Pelanggaran Baru"
-            : "Prestasi Baru",
-        pesan: `${
-          violation.tipe === "pelanggaran"
-            ? "Anda mendapat pelanggaran"
-            : "Selamat! Anda mendapat prestasi"
-        }: ${violation.nama}`,
+        judul: "Pelanggaran Baru",
+        pesan: `Anda melakukan pelanggaran: ${violation.nama}. Poin Anda bertambah ${violation.point}.`,
       },
     });
   }
@@ -487,6 +457,77 @@ async function main() {
   }
   console.log("✅ Classroom student counts updated");
 
+  // 10. Create Achievement Data
+  const achievements = [
+    {
+      nama: "Juara 1 Olimpiade Matematika",
+      kategori: "akademik",
+      point: 50,
+    },
+    {
+      nama: "Juara 2 Olimpiade Fisika",
+      kategori: "akademik",
+      point: 40,
+    },
+    {
+      nama: "Juara 3 Olimpiade Kimia",
+      kategori: "akademik",
+      point: 30,
+    },
+    {
+      nama: "Juara 1 Lomba Coding",
+      kategori: "non_akademik",
+      point: 45,
+    },
+    {
+      nama: "Juara 2 Desain Grafis",
+      kategori: "non_akademik",
+      point: 35,
+    },
+    {
+      nama: "Juara 1 Futsal",
+      kategori: "olahraga",
+      point: 40,
+    },
+    {
+      nama: "Juara 2 Basket",
+      kategori: "olahraga",
+      point: 35,
+    },
+    {
+      nama: "Juara 3 Voli",
+      kategori: "olahraga",
+      point: 30,
+    },
+    {
+      nama: "Juara 1 Paduan Suara",
+      kategori: "kesenian",
+      point: 40,
+    },
+    {
+      nama: "Juara 2 Drama",
+      kategori: "kesenian",
+      point: 35,
+    },
+    {
+      nama: "Siswa Teladan",
+      kategori: "lainnya",
+      point: 50,
+    },
+    {
+      nama: "Siswa Berprestasi",
+      kategori: "lainnya",
+      point: 30,
+    },
+  ];
+
+  for (const achievementData of achievements) {
+    await prisma.achievement.create({
+      data: achievementData,
+    });
+  }
+  console.log("✅ Achievement data created");
+
   console.log("\n🎉 Seed completed successfully!");
   console.log("\n📋 Summary:");
   console.log("- 1 Superadmin");
@@ -497,6 +538,7 @@ async function main() {
   console.log("- 2 Angkatan (2023, 2024)");
   console.log("- 5 Students");
   console.log("- 8 Violation types");
+  console.log("- 12 Achievement types");
   console.log("- 3 Sample violations");
   console.log("- 3 Automatic actions");
   console.log("\n🔑 Default Credentials:");
