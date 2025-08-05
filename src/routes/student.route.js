@@ -11,6 +11,9 @@ const {
   getDetailSiswa,
   searchSiswa,
   exportSiswa,
+  getMyProfile,
+  getMyViolations,
+  getMyAchievements,
 } = require("../controllers/student.controller");
 
 // hanya superadmin yang bisa kelola data
@@ -26,4 +29,20 @@ router.post("/import", upload.single("file"), importSiswa);
 router.get("/detail/:id", getDetailSiswa);
 router.get("/search", searchSiswa);
 router.get("/export", exportSiswa);
+
+// Endpoint untuk siswa yang login
+router.get("/profile", authenticate, requireRole(["siswa"]), getMyProfile);
+router.get(
+  "/my-violations",
+  authenticate,
+  requireRole(["siswa"]),
+  getMyViolations
+);
+router.get(
+  "/my-achievements",
+  authenticate,
+  requireRole(["siswa"]),
+  getMyAchievements
+);
+
 module.exports = router;

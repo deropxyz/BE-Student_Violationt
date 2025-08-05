@@ -248,6 +248,207 @@ const exportSiswa = async (req, res) => {
   }
 };
 
+// Get profile siswa yang sedang login
+const getMyProfile = async (req, res) => {
+  try {
+    const userId = req.user.id; // Dari middleware authentication
+
+    const siswa = await prisma.student.findUnique({
+      where: { userId: userId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            createdAt: true,
+          },
+        },
+        classroom: {
+          include: {
+            waliKelas: {
+              include: {
+                user: {
+                  select: {
+                    name: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        angkatan: true,
+        orangTua: {
+          include: {
+            user: {
+              select: {
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+        violations: {
+          include: {
+            violation: true,
+            reporter: {
+              select: {
+                name: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 5, // Ambil 5 pelanggaran terbaru
+        },
+        achievements: {
+          include: {
+            achievement: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 5, // Ambil 5 prestasi terbaru
+        },
+      },
+    });
+
+    if (!siswa) {
+      return res.status(404).json({ error: "Data siswa tidak ditemukan" });
+    }
+
+    // Hitung statistik
+    const totalViolations = await prisma.studentViolation.count({
+      where: { studentId: siswa.id },
+    });
+
+    const totalAchievements = await prisma.studentAchievement.count({
+      where: { studentId: siswa.id },
+    });
+
+    // Tambahkan statistik ke response
+    const response = {
+      ...siswa,
+      statistics: {
+        totalViolations,
+        totalAchievements,
+        currentScore: siswa.totalScore,
+      },
+    };
+
+    res.json(response);
+  } catch (err) {
+    console.error("Error getting student profile:", err);
+    res.status(500).json({ error: "Gagal mengambil profile siswa" });
+  }
+};
+
+// Get riwayat pelanggaran siswa yang login
+const getMyViolations = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Cari student berdasarkan userId
+    const student = await prisma.student.findUnique({
+      where: { userId: userId },
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: "Data siswa tidak ditemukan" });
+    }
+
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [violations, total] = await Promise.all([
+      prisma.studentViolation.findMany({
+        where: { studentId: student.id },
+        include: {
+          violation: true,
+          reporter: {
+            select: {
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        skip,
+        take: parseInt(limit),
+      }),
+      prisma.studentViolation.count({
+        where: { studentId: student.id },
+      }),
+    ]);
+
+    res.json({
+      data: violations,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit)),
+      },
+    });
+  } catch (err) {
+    console.error("Error getting student violations:", err);
+    res.status(500).json({ error: "Gagal mengambil riwayat pelanggaran" });
+  }
+};
+
+// Get riwayat prestasi siswa yang login
+const getMyAchievements = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Cari student berdasarkan userId
+    const student = await prisma.student.findUnique({
+      where: { userId: userId },
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: "Data siswa tidak ditemukan" });
+    }
+
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [achievements, total] = await Promise.all([
+      prisma.studentAchievement.findMany({
+        where: { studentId: student.id },
+        include: {
+          achievement: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        skip,
+        take: parseInt(limit),
+      }),
+      prisma.studentAchievement.count({
+        where: { studentId: student.id },
+      }),
+    ]);
+
+    res.json({
+      data: achievements,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit)),
+      },
+    });
+  } catch (err) {
+    console.error("Error getting student achievements:", err);
+    res.status(500).json({ error: "Gagal mengambil riwayat prestasi" });
+  }
+};
+
 module.exports = {
   getAllSiswa,
   createSiswa,
@@ -257,4 +458,7 @@ module.exports = {
   getDetailSiswa,
   searchSiswa,
   exportSiswa,
+  getMyProfile,
+  getMyViolations,
+  getMyAchievements,
 };
