@@ -256,6 +256,4 @@ module.exports = {
   searchTeacher,
   resetTeacherPassword,
   getMyProfile,
-  getMyStudents,
-  getClassViolationReports,
 };
