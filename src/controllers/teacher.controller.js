@@ -177,7 +177,11 @@ const getMyProfile = async (req, res) => {
             createdAt: true,
           },
         },
+        // Hanya ambil kelas jika guru adalah wali kelas (waliKelasId)
         classrooms: {
+          where: {
+            waliKelasId: teacher ? teacher.id : -1, // Filter hanya kelas yang dia jadi wali kelas
+          },
           include: {
             angkatan: true,
             students: {
@@ -206,20 +210,47 @@ const getMyProfile = async (req, res) => {
       return res.status(404).json({ error: "Data guru tidak ditemukan" });
     }
 
-    // Hitung statistik jika guru adalah wali kelas
+    // Cek ulang kelas yang menjadi wali kelas
+    const waliKelasClassrooms = await prisma.classroom.findMany({
+      where: {
+        waliKelasId: teacher.id,
+      },
+      include: {
+        angkatan: true,
+        students: {
+          select: {
+            id: true,
+            nisn: true,
+            totalScore: true,
+            user: {
+              select: {
+                name: true,
+              },
+            },
+          },
+          orderBy: {
+            user: {
+              name: "asc",
+            },
+          },
+        },
+      },
+    });
+
+    // Hitung statistik hanya untuk kelas yang jadi wali kelas
     let statistics = {
-      totalClasses: teacher.classrooms.length,
+      isWaliKelas: waliKelasClassrooms.length > 0,
       totalStudents: 0,
       averageScore: 0,
     };
 
-    if (teacher.classrooms.length > 0) {
-      const totalStudents = teacher.classrooms.reduce(
+    if (waliKelasClassrooms.length > 0) {
+      const totalStudents = waliKelasClassrooms.reduce(
         (sum, classroom) => sum + classroom.students.length,
         0
       );
 
-      const totalScore = teacher.classrooms.reduce(
+      const totalScore = waliKelasClassrooms.reduce(
         (sum, classroom) =>
           sum +
           classroom.students.reduce(
@@ -234,9 +265,16 @@ const getMyProfile = async (req, res) => {
         totalStudents > 0 ? Math.round(totalScore / totalStudents) : 0;
     }
 
-    // Tambahkan statistik ke response
+    // Susun response dengan data lengkap guru
     const response = {
-      ...teacher,
+      id: teacher.id,
+      userId: teacher.userId,
+      nip: teacher.nip,
+      noHp: teacher.noHp,
+      alamat: teacher.alamat,
+      user: teacher.user,
+      // Hanya tampilkan kelas jika jadi wali kelas
+      waliKelas: waliKelasClassrooms.length > 0 ? waliKelasClassrooms[0] : null,
       statistics,
     };
 
