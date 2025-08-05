@@ -13,13 +13,13 @@ const {
 router.get(
   "/",
   authenticate,
-  requireRole(["bk", "superadmin"]),
+  requireRole(["bk", "superadmin", "guru", "siswa"]),
   getAllViolations
 );
 router.get(
   "/:id",
   authenticate,
-  requireRole(["bk", "superadmin"]),
+  requireRole(["bk", "superadmin", "guru", "siswa"]),
   getViolationDetail
 );
 router.post(
