@@ -11,6 +11,7 @@ const {
   getTeacherDetail,
   searchTeacher,
   resetTeacherPassword,
+  getMyProfile,
 } = require("../controllers/teacher.controller");
 
 // hanya superadmin yang bisa kelola akun guru
@@ -25,5 +26,8 @@ router.get("/:id", getTeacherDetail);
 router.get("/search", searchTeacher);
 // Reset password guru
 router.put("/:id/reset-password", resetTeacherPassword);
+
+// Endpoint untuk guru yang login
+router.get("/profile", authenticate, requireRole(["guru"]), getMyProfile);
 
 module.exports = router;

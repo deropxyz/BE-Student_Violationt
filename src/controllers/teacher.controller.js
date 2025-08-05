@@ -160,6 +160,93 @@ const resetTeacherPassword = async (req, res) => {
   }
 };
 
+// Get profile guru yang sedang login
+const getMyProfile = async (req, res) => {
+  try {
+    const userId = req.user.id; // Dari middleware authentication
+
+    const teacher = await prisma.teacher.findUnique({
+      where: { userId: userId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            createdAt: true,
+          },
+        },
+        classrooms: {
+          include: {
+            angkatan: true,
+            students: {
+              select: {
+                id: true,
+                nisn: true,
+                totalScore: true,
+                user: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+              orderBy: {
+                user: {
+                  name: "asc",
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!teacher) {
+      return res.status(404).json({ error: "Data guru tidak ditemukan" });
+    }
+
+    // Hitung statistik jika guru adalah wali kelas
+    let statistics = {
+      totalClasses: teacher.classrooms.length,
+      totalStudents: 0,
+      averageScore: 0,
+    };
+
+    if (teacher.classrooms.length > 0) {
+      const totalStudents = teacher.classrooms.reduce(
+        (sum, classroom) => sum + classroom.students.length,
+        0
+      );
+
+      const totalScore = teacher.classrooms.reduce(
+        (sum, classroom) =>
+          sum +
+          classroom.students.reduce(
+            (scoreSum, student) => scoreSum + student.totalScore,
+            0
+          ),
+        0
+      );
+
+      statistics.totalStudents = totalStudents;
+      statistics.averageScore =
+        totalStudents > 0 ? Math.round(totalScore / totalStudents) : 0;
+    }
+
+    // Tambahkan statistik ke response
+    const response = {
+      ...teacher,
+      statistics,
+    };
+
+    res.json(response);
+  } catch (err) {
+    console.error("Error getting teacher profile:", err);
+    res.status(500).json({ error: "Gagal mengambil profile guru" });
+  }
+};
+
 module.exports = {
   getAllTeachers,
   createTeacher,
@@ -168,4 +255,7 @@ module.exports = {
   getTeacherDetail,
   searchTeacher,
   resetTeacherPassword,
+  getMyProfile,
+  getMyStudents,
+  getClassViolationReports,
 };
