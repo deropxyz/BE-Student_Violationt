@@ -228,12 +228,10 @@ const getAvailableTeachers = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error("Error in getAvailableTeachers:", error);
-    res
-      .status(500)
-      .json({
-        message: "Gagal mengambil data guru tersedia",
-        error: error.message,
-      });
+    res.status(500).json({
+      message: "Gagal mengambil data guru tersedia",
+      error: error.message,
+    });
   }
 };
 

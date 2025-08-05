@@ -107,19 +107,85 @@ const createStudentViolation = async (req, res) => {
 // Update laporan pelanggaran siswa
 const updateStudentViolation = async (req, res) => {
   const { id } = req.params;
-  const { tanggal, waktu, deskripsi, evidenceUrl } = req.body;
+  const { violationId, tanggal, waktu, deskripsi, evidenceUrl } = req.body;
   try {
-    const violation = await prisma.studentViolation.update({
+    // Get current violation record
+    const currentRecord = await prisma.studentViolation.findUnique({
       where: { id: parseInt(id) },
-      data: {
-        tanggal: tanggal ? new Date(tanggal) : undefined,
-        waktu: waktu ? new Date(waktu) : undefined,
-        deskripsi,
-        evidenceUrl,
+      include: {
+        violation: true,
+        student: true,
       },
     });
-    res.json(violation);
+
+    if (!currentRecord) {
+      return res
+        .status(404)
+        .json({ error: "Laporan pelanggaran tidak ditemukan" });
+    }
+
+    let updatedData = {
+      tanggal: tanggal ? new Date(tanggal) : undefined,
+      waktu: waktu ? new Date(waktu) : undefined,
+      deskripsi,
+      evidenceUrl,
+    };
+
+    // Jika violationId berubah, perlu recalkulasi skor
+    if (violationId && parseInt(violationId) !== currentRecord.violationId) {
+      // Get new violation details
+      const newViolation = await prisma.violation.findUnique({
+        where: { id: parseInt(violationId) },
+      });
+
+      if (!newViolation) {
+        return res
+          .status(404)
+          .json({ error: "Pelanggaran baru tidak ditemukan" });
+      }
+
+      // Calculate score difference
+      const oldPoint = currentRecord.violation.point;
+      const newPoint = newViolation.point;
+      const pointDifference = newPoint - oldPoint;
+
+      // Update student total score
+      const newTotalScore = currentRecord.student.totalScore + pointDifference;
+      await prisma.student.update({
+        where: { id: currentRecord.studentId },
+        data: { totalScore: newTotalScore },
+      });
+
+      // Create score history for the change
+      await prisma.scoreHistory.create({
+        data: {
+          studentId: currentRecord.studentId,
+          pointLama: currentRecord.student.totalScore,
+          pointBaru: newTotalScore,
+          alasan: `Update pelanggaran: ${currentRecord.violation.nama} → ${newViolation.nama}`,
+          tanggal: new Date(),
+        },
+      });
+
+      // Add violation update to data
+      updatedData.violationId = parseInt(violationId);
+      updatedData.pointSaat = newPoint;
+    }
+
+    // Update violation record
+    const updatedViolation = await prisma.studentViolation.update({
+      where: { id: parseInt(id) },
+      data: updatedData,
+      include: {
+        student: { include: { user: true, classroom: true } },
+        violation: true,
+        reporter: true,
+      },
+    });
+
+    res.json(updatedViolation);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Gagal update laporan pelanggaran siswa" });
   }
 };
@@ -128,9 +194,55 @@ const updateStudentViolation = async (req, res) => {
 const deleteStudentViolation = async (req, res) => {
   const { id } = req.params;
   try {
+    // Get violation record before deletion
+    const violationRecord = await prisma.studentViolation.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        violation: true,
+        student: true,
+      },
+    });
+
+    if (!violationRecord) {
+      return res
+        .status(404)
+        .json({ error: "Laporan pelanggaran tidak ditemukan" });
+    }
+
+    // Calculate new score (subtract violation point)
+    const currentScore = violationRecord.student.totalScore;
+    const newScore = currentScore - violationRecord.violation.point;
+
+    // Update student total score
+    await prisma.student.update({
+      where: { id: violationRecord.studentId },
+      data: { totalScore: newScore },
+    });
+
+    // Create score history
+    await prisma.scoreHistory.create({
+      data: {
+        studentId: violationRecord.studentId,
+        pointLama: currentScore,
+        pointBaru: newScore,
+        alasan: `Hapus pelanggaran: ${violationRecord.violation.nama}`,
+        tanggal: new Date(),
+      },
+    });
+
+    // Delete violation record
     await prisma.studentViolation.delete({ where: { id: parseInt(id) } });
-    res.json({ message: "Laporan pelanggaran siswa berhasil dihapus" });
+
+    res.json({
+      message: "Laporan pelanggaran siswa berhasil dihapus",
+      scoreUpdate: {
+        scoreLama: currentScore,
+        scoreBaru: newScore,
+        pointDikurangi: violationRecord.violation.point,
+      },
+    });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Gagal hapus laporan pelanggaran siswa" });
   }
 };
