@@ -1,25 +1,28 @@
 const express = require("express");
 const router = express.Router();
-const { authenticate, requireRole } = require("../middlewares/auth.middleware");
+const {
+  authenticate,
+  requireRole,
+} = require("../../middlewares/auth.middleware");
 const {
   getAllViolations,
   getViolationDetail,
   createViolation,
   updateViolation,
   deleteViolation,
-} = require("../controllers/violation.controller");
+} = require("../../controllers/Master/violation.controller");
 
 // Endpoint CRUD data pelanggaran - Admin dan BK
 router.get(
   "/",
   authenticate,
-  requireRole(["bk", "superadmin", "guru", "siswa"]),
+  requireRole(["bk", "superadmin", "guru"]),
   getAllViolations
 );
 router.get(
   "/:id",
   authenticate,
-  requireRole(["bk", "superadmin", "guru", "siswa"]),
+  requireRole(["bk", "superadmin", "guru"]),
   getViolationDetail
 );
 router.post(

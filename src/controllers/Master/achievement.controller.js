@@ -37,13 +37,14 @@ const getAchievementDetail = async (req, res) => {
 
 // Tambah prestasi
 const createAchievement = async (req, res) => {
-  const { nama, kategori, point } = req.body;
+  const { nama, kategori, point, isActive } = req.body;
   try {
     const achievement = await prisma.achievement.create({
       data: {
         nama,
         kategori,
         point: parseInt(point),
+        isActive: isActive !== undefined ? isActive : true,
       },
     });
     res.status(201).json(achievement);
@@ -55,7 +56,7 @@ const createAchievement = async (req, res) => {
 // Update prestasi
 const updateAchievement = async (req, res) => {
   const { id } = req.params;
-  const { nama, kategori, point } = req.body;
+  const { nama, kategori, point, isActive } = req.body;
   try {
     const achievement = await prisma.achievement.update({
       where: { id: parseInt(id) },
@@ -63,6 +64,7 @@ const updateAchievement = async (req, res) => {
         nama,
         kategori,
         point: point ? parseInt(point) : undefined,
+        isActive: isActive !== undefined ? isActive : undefined,
       },
     });
     res.json(achievement);

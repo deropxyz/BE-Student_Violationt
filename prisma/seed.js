@@ -28,16 +28,16 @@ async function main() {
     update: {},
     create: {
       tahun: "2024",
-      lulusDate: new Date("2027-06-15"),
+      status: "aktif",
     },
   });
 
-  const angkatan2023 = await prisma.angkatan.upsert({
-    where: { tahun: "2023" },
+  const angkatan2025 = await prisma.angkatan.upsert({
+    where: { tahun: "2025" },
     update: {},
     create: {
-      tahun: "2023",
-      lulusDate: new Date("2026-06-15"),
+      tahun: "2025",
+      status: "aktif",
     },
   });
   console.log("✅ Angkatan created");
@@ -107,59 +107,6 @@ async function main() {
     },
   });
   console.log("✅ BK user created");
-
-  // 5. Create Parent Users
-  const orangTuaUsers = [
-    {
-      name: "Drs. Bambang Wijaya",
-      email: "bambang.wijaya@gmail.com",
-      noHp: "081234567893",
-      alamat: "Jl. Veteran No. 234, Garut",
-      pekerjaan: "PNS",
-    },
-    {
-      name: "Ibu Sari Indah",
-      email: "sari.indah@gmail.com",
-      noHp: "081234567894",
-      alamat: "Jl. Ahmad Yani No. 567, Garut",
-      pekerjaan: "Wiraswasta",
-    },
-    {
-      name: "Bapak Agus Hermawan",
-      email: "agus.hermawan@yahoo.com",
-      noHp: "081234567895",
-      alamat: "Jl. Diponegoro No. 890, Garut",
-      pekerjaan: "Petani",
-    },
-  ];
-
-  const orangTuas = [];
-  for (const orangTuaData of orangTuaUsers) {
-    const user = await prisma.user.upsert({
-      where: { email: orangTuaData.email },
-      update: {},
-      create: {
-        name: orangTuaData.name,
-        email: orangTuaData.email,
-        password: hashedPassword,
-        role: "orangtua",
-      },
-    });
-
-    const orangTua = await prisma.orangTua.upsert({
-      where: { userId: user.id },
-      update: {},
-      create: {
-        userId: user.id,
-        noHp: orangTuaData.noHp,
-        alamat: orangTuaData.alamat,
-        pekerjaan: orangTuaData.pekerjaan,
-      },
-    });
-
-    orangTuas.push(orangTua);
-  }
-  console.log("✅ Parents created");
 
   // 6. Create Classrooms
   const classrooms = [
