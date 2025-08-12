@@ -19,12 +19,7 @@ const {
   requireRole,
 } = require("../../middlewares/auth.middleware");
 
-router.get(
-  "/classrooms",
-  authenticate,
-  requireRole("superadmin"),
-  getAllClassrooms
-);
+router.get("/classrooms", authenticate, getAllClassrooms);
 router.get(
   "/classrooms/:id",
   authenticate,

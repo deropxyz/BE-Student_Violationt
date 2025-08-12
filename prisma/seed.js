@@ -162,7 +162,7 @@ async function main() {
       noHp: "081234567897",
       classroomId: createdClassrooms[0].id,
       angkatanId: angkatan2024.id,
-      orangTuaId: orangTuas[1].id,
+      orangTuaId: orangTuas[0].id,
     },
     {
       nisn: "2024001003",
@@ -174,7 +174,7 @@ async function main() {
       noHp: "081234567898",
       classroomId: createdClassrooms[1].id,
       angkatanId: angkatan2024.id,
-      orangTuaId: orangTuas[2].id,
+      orangTuaId: orangTuas[0].id,
     },
     {
       nisn: "2023001001",

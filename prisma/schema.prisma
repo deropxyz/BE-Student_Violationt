@@ -59,12 +59,10 @@ model User {
   createdAt DateTime @default(now())
   isActive  Boolean  @default(true)
 
-  student            Student?
-  teacher            Teacher?
-  orangTua           OrangTua?
-  violationReports   StudentViolation[]   @relation("ViolationReporter")
-  achievementReports StudentAchievement[] @relation("AchievementReporter")
-  studentReports     StudentReport[]      @relation("ReportReporter")
+  student        Student?
+  teacher        Teacher?
+  orangTua       OrangTua?
+  studentReports StudentReport[] @relation("ReportReporter")
 }
 
 model Student {
@@ -88,8 +86,6 @@ model Student {
   orangTua    OrangTua? @relation(fields: [orangTuaId], references: [id])
   orangTuaId  Int?
 
-  violations    StudentViolation[]
-  achievements  StudentAchievement[]
   reports       StudentReport[]
   notifications Notification[]
 }
@@ -144,8 +140,7 @@ model Violation {
   isActive  Boolean             @default(true)
   createdAt DateTime            @default(now())
 
-  records StudentViolation[]
-  reports StudentReport[]    @relation("ViolationReports")
+  reports StudentReport[] @relation("ViolationReports")
 }
 
 model Achievement {
@@ -156,44 +151,7 @@ model Achievement {
   isActive  Boolean          @default(true)
   createdAt DateTime         @default(now())
 
-  records StudentAchievement[]
-  reports StudentReport[]      @relation("AchievementReports")
-}
-
-model StudentViolation {
-  id          Int       @id @default(autoincrement())
-  student     Student   @relation(fields: [studentId], references: [id])
-  studentId   Int
-  violation   Violation @relation(fields: [violationId], references: [id])
-  violationId Int
-  reporter    User      @relation("ViolationReporter", fields: [reporterId], references: [id])
-  reporterId  Int
-
-  tanggal   DateTime  @default(now())
-  waktu     DateTime? // waktu kejadian jika berbeda
-  deskripsi String?
-  bukti     String?
-  pointSaat Int // point saat pelanggaran terjadi
-  createdAt DateTime  @default(now())
-
-  penanganan Penanganan?
-}
-
-model StudentAchievement {
-  id            Int         @id @default(autoincrement())
-  student       Student     @relation(fields: [studentId], references: [id])
-  studentId     Int
-  achievement   Achievement @relation(fields: [achievementId], references: [id])
-  achievementId Int
-  reporter      User        @relation("AchievementReporter", fields: [reporterId], references: [id])
-  reporterId    Int
-
-  tanggal   DateTime  @default(now())
-  waktu     DateTime? // waktu kejadian jika berbeda
-  deskripsi String?
-  bukti     String?
-  pointSaat Int // point saat prestasi diberikan
-  createdAt DateTime  @default(now())
+  reports StudentReport[] @relation("AchievementReports")
 }
 
 model StudentReport {
@@ -234,8 +192,6 @@ model TindakanOtomatis {
 
 model Penanganan {
   id                 Int               @id @default(autoincrement())
-  studentViolation   StudentViolation? @relation(fields: [studentViolationId], references: [id])
-  studentViolationId Int?              @unique
   studentReport      StudentReport?    @relation(fields: [studentReportId], references: [id])
   studentReportId    Int?              @unique
   tindakanOtomatis   TindakanOtomatis? @relation(fields: [tindakanOtomatisId], references: [id])

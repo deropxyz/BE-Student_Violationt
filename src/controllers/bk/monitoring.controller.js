@@ -5,26 +5,44 @@ const prisma = new PrismaClient();
 const getBKDashboard = async (req, res) => {
   try {
     // Get overview statistics
-    const stats = await Promise.all([
+    const [
+      totalStudents,
+      highRiskStudents,
+      mediumRiskStudents,
+      lowRiskStudents,
+      violationsThisMonth,
+      achievementsThisMonth,
+      topViolations,
+      studentsNeedingAttention,
+    ] = await Promise.all([
       // Total students
       prisma.student.count(),
 
-      // Students by risk level
+      // High risk students (totalScore < -50)
       prisma.student.count({
         where: {
-          violations: {
-            some: {
-              violation: {
-                point: { gte: 50 },
-              },
-            },
-          },
+          totalScore: { lt: -50 },
+        },
+      }),
+
+      // Medium risk students (totalScore between -50 and 0)
+      prisma.student.count({
+        where: {
+          totalScore: { gte: -50, lt: 0 },
+        },
+      }),
+
+      // Low risk students (totalScore >= 0)
+      prisma.student.count({
+        where: {
+          totalScore: { gte: 0 },
         },
       }),
 
       // Violations this month
-      prisma.studentViolation.count({
+      prisma.studentReport.count({
         where: {
+          tipe: "violation",
           createdAt: {
             gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
           },
@@ -32,8 +50,9 @@ const getBKDashboard = async (req, res) => {
       }),
 
       // Achievements this month
-      prisma.studentAchievement.count({
+      prisma.studentReport.count({
         where: {
+          tipe: "achievement",
           createdAt: {
             gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
           },
@@ -45,8 +64,9 @@ const getBKDashboard = async (req, res) => {
         include: {
           _count: {
             select: {
-              studentViolations: {
+              reports: {
                 where: {
+                  tipe: "violation",
                   createdAt: {
                     gte: new Date(
                       new Date().getFullYear(),
@@ -60,7 +80,7 @@ const getBKDashboard = async (req, res) => {
           },
         },
         orderBy: {
-          studentViolations: {
+          reports: {
             _count: "desc",
           },
         },
@@ -80,13 +100,12 @@ const getBKDashboard = async (req, res) => {
           },
           classroom: {
             select: {
-              nama: true,
+              namaKelas: true,
             },
           },
           _count: {
             select: {
-              violations: true,
-              achievements: true,
+              reports: true,
             },
           },
         },
@@ -98,27 +117,38 @@ const getBKDashboard = async (req, res) => {
     ]);
 
     const response = {
-      overview: {
-        totalStudents: stats[0],
-        highRiskStudents: stats[1],
-        violationsThisMonth: stats[2],
-        achievementsThisMonth: stats[3],
+      data: {
+        totalStudents,
+        highRiskStudents,
+        mediumRiskStudents,
+        lowRiskStudents,
+        violationsThisMonth,
+        achievementsThisMonth,
+        averageScore:
+          totalStudents > 0
+            ? Math.round(
+                (
+                  await prisma.student.aggregate({
+                    _avg: { totalScore: true },
+                  })
+                )._avg.totalScore || 0
+              )
+            : 0,
       },
-      topViolations: stats[4].map((v) => ({
+      topViolations: topViolations.map((v) => ({
         id: v.id,
         nama: v.nama,
         kategori: v.kategori,
         point: v.point,
-        count: v._count.studentViolations,
+        count: v._count.reports,
       })),
-      studentsNeedingAttention: stats[5].map((s) => ({
+      studentsNeedingAttention: studentsNeedingAttention.map((s) => ({
         id: s.id,
         nisn: s.nisn,
         nama: s.user?.name,
-        kelas: s.classroom?.nama,
+        kelas: s.classroom?.namaKelas,
         totalScore: s.totalScore,
-        violationCount: s._count.violations,
-        achievementCount: s._count.achievements,
+        reportCount: s._count.reports,
       })),
     };
 
@@ -135,6 +165,7 @@ const getStudentsForMonitoring = async (req, res) => {
       riskLevel,
       classroomId,
       angkatanId,
+      search,
       page = 1,
       limit = 10,
     } = req.query;
@@ -145,14 +176,34 @@ const getStudentsForMonitoring = async (req, res) => {
     if (classroomId) filter.classroomId = parseInt(classroomId);
     if (angkatanId) filter.angkatanId = parseInt(angkatanId);
 
+    // Add search filter
+    if (search) {
+      filter.OR = [
+        {
+          nisn: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          user: {
+            name: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+      ];
+    }
+
     // Add risk level filter
     if (riskLevel) {
       if (riskLevel === "HIGH") {
         filter.totalScore = { lt: -50 };
       } else if (riskLevel === "MEDIUM") {
-        filter.totalScore = { gte: -50, lt: -25 };
+        filter.totalScore = { gte: -50, lt: 0 };
       } else if (riskLevel === "LOW") {
-        filter.totalScore = { gte: -25 };
+        filter.totalScore = { gte: 0 };
       }
     }
 
@@ -168,7 +219,7 @@ const getStudentsForMonitoring = async (req, res) => {
           },
           classroom: {
             select: {
-              nama: true,
+              namaKelas: true,
             },
           },
           angkatan: {
@@ -178,11 +229,13 @@ const getStudentsForMonitoring = async (req, res) => {
           },
           _count: {
             select: {
-              violations: true,
-              achievements: true,
+              reports: true,
             },
           },
-          violations: {
+          reports: {
+            where: {
+              tipe: "violation",
+            },
             orderBy: {
               createdAt: "desc",
             },
@@ -207,23 +260,37 @@ const getStudentsForMonitoring = async (req, res) => {
     const formattedStudents = students.map((s) => {
       let riskLevel = "LOW";
       if (s.totalScore < -50) riskLevel = "HIGH";
-      else if (s.totalScore < -25) riskLevel = "MEDIUM";
+      else if (s.totalScore < 0) riskLevel = "MEDIUM";
+
+      // Count violations and achievements from reports
+      const violationReports = s.reports.filter((r) => r.tipe === "violation");
+      const achievementReports = s.reports.filter(
+        (r) => r.tipe === "achievement"
+      );
 
       return {
         id: s.id,
         nisn: s.nisn,
         nama: s.user?.name,
         email: s.user?.email,
-        kelas: s.classroom?.nama,
+        kelas: s.classroom?.namaKelas,
         angkatan: s.angkatan?.tahun,
         totalScore: s.totalScore,
         riskLevel,
-        violationCount: s._count.violations,
-        achievementCount: s._count.achievements,
-        recentViolations: s.violations.map((v) => ({
-          nama: v.violation.nama,
-          point: v.violation.point,
-          tanggal: v.createdAt,
+        totalViolations: violationReports.length,
+        totalAchievements: achievementReports.length,
+        totalViolationPoints: violationReports.reduce(
+          (sum, r) => sum + (r.pointSaat || 0),
+          0
+        ),
+        totalAchievementPoints: achievementReports.reduce(
+          (sum, r) => sum + (r.pointSaat || 0),
+          0
+        ),
+        recentViolations: s.reports.slice(0, 3).map((r) => ({
+          nama: r.violation?.nama || "Unknown",
+          point: r.pointSaat || r.violation?.point || 0,
+          tanggal: r.createdAt,
         })),
       };
     });
@@ -258,7 +325,7 @@ const getStudentDetailForBK = async (req, res) => {
         },
         classroom: {
           select: {
-            nama: true,
+            namaKelas: true,
             waliKelas: {
               select: {
                 user: {
@@ -276,20 +343,9 @@ const getStudentDetailForBK = async (req, res) => {
             tahun: true,
           },
         },
-        violations: {
+        reports: {
           include: {
             violation: true,
-            reporter: {
-              select: {
-                name: true,
-                role: true,
-              },
-            },
-          },
-          orderBy: { createdAt: "desc" },
-        },
-        achievements: {
-          include: {
             achievement: true,
             reporter: {
               select: {
@@ -318,8 +374,9 @@ const getStudentDetailForBK = async (req, res) => {
     }
 
     // Calculate statistics
-    const violations = student.violations || [];
-    const achievements = student.achievements || [];
+    const reports = student.reports || [];
+    const violations = reports.filter((r) => r.tipe === "violation");
+    const achievements = reports.filter((r) => r.tipe === "achievement");
 
     const now = new Date();
     const oneMonthAgo = new Date(
@@ -365,7 +422,7 @@ const getStudentDetailForBK = async (req, res) => {
         tglLahir: student.tglLahir,
         alamat: student.alamat,
         noHp: student.noHp,
-        kelas: student.classroom?.nama,
+        kelas: student.classroom?.namaKelas,
         angkatan: student.angkatan?.tahun,
         waliKelas: student.classroom?.waliKelas?.user?.name,
         waliKelasEmail: student.classroom?.waliKelas?.user?.email,
@@ -377,8 +434,8 @@ const getStudentDetailForBK = async (req, res) => {
         riskLevel,
         totalScore: stats.creditScore,
       },
-      violations: student.violations,
-      achievements: student.achievements,
+      violations: violations,
+      achievements: achievements,
     };
 
     res.json(response);
@@ -403,44 +460,78 @@ const getViolationTrends = async (req, res) => {
       startDate = new Date(now.getFullYear(), 0, 1);
     }
 
-    // Get violation trends
-    const violationTrends = await prisma.studentViolation.groupBy({
-      by: ["createdAt"],
+    // Get violation trends (simplified approach)
+    const violations = await prisma.studentReport.findMany({
       where: {
+        tipe: "violation",
         createdAt: {
           gte: startDate,
         },
       },
-      _count: true,
+      select: {
+        createdAt: true,
+      },
       orderBy: {
         createdAt: "asc",
       },
     });
 
+    // Group by date manually
+    const violationTrends = violations.reduce((acc, violation) => {
+      const date = violation.createdAt.toISOString().split("T")[0]; // Get date only
+      acc[date] = (acc[date] || 0) + 1;
+      return acc;
+    }, {});
+
+    // Convert to array format
+    const trendsArray = Object.entries(violationTrends).map(
+      ([date, count]) => ({
+        date,
+        count,
+      })
+    );
+
     // Get violation by category
-    const violationsByCategory = await prisma.violation.groupBy({
-      by: ["kategori"],
-      _count: {
-        studentViolations: true,
-      },
-      where: {
-        studentViolations: {
-          some: {
-            createdAt: {
-              gte: startDate,
+    const violationsByCategory = await prisma.violation.findMany({
+      include: {
+        _count: {
+          select: {
+            reports: {
+              where: {
+                tipe: "violation",
+                createdAt: {
+                  gte: startDate,
+                },
+              },
             },
           },
         },
       },
     });
 
+    // Group by category manually
+    const categoryStats = violationsByCategory.reduce((acc, violation) => {
+      const category = violation.kategori;
+      const count = violation._count.reports;
+      acc[category] = (acc[category] || 0) + count;
+      return acc;
+    }, {});
+
+    const categoryArray = Object.entries(categoryStats).map(
+      ([kategori, count]) => ({
+        kategori,
+        count,
+      })
+    );
+
     // Get most frequent violations
     const topViolations = await prisma.violation.findMany({
       include: {
         _count: {
           select: {
-            studentViolations: {
+            reports: {
               where: {
+                tipe: "violation",
                 createdAt: {
                   gte: startDate,
                 },
@@ -450,7 +541,7 @@ const getViolationTrends = async (req, res) => {
         },
       },
       orderBy: {
-        studentViolations: {
+        reports: {
           _count: "desc",
         },
       },
@@ -458,14 +549,14 @@ const getViolationTrends = async (req, res) => {
     });
 
     res.json({
-      trends: violationTrends,
-      byCategory: violationsByCategory,
+      trends: trendsArray,
+      byCategory: categoryArray,
       topViolations: topViolations.map((v) => ({
         id: v.id,
         nama: v.nama,
         kategori: v.kategori,
         point: v.point,
-        count: v._count.studentViolations,
+        count: v._count.reports,
       })),
     });
   } catch (err) {
@@ -474,9 +565,123 @@ const getViolationTrends = async (req, res) => {
   }
 };
 
+// Get all classrooms with student statistics
+const getClassrooms = async (req, res) => {
+  try {
+    const classrooms = await prisma.classroom.findMany({
+      include: {
+        _count: {
+          select: {
+            students: true,
+          },
+        },
+        students: {
+          include: {
+            reports: {
+              include: {
+                violation: true,
+                achievement: true,
+              },
+            },
+          },
+        },
+        waliKelas: {
+          select: {
+            id: true,
+            user: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        namaKelas: "asc",
+      },
+    });
+
+    // Calculate statistics for each classroom
+    const classroomStats = classrooms.map((classroom) => {
+      let totalViolationPoints = 0;
+      let totalAchievementPoints = 0;
+      let highRiskStudents = 0;
+      let mediumRiskStudents = 0;
+      let lowRiskStudents = 0;
+
+      classroom.students.forEach((student) => {
+        // Separate violation and achievement reports
+        const violationReports = student.reports.filter(
+          (r) => r.tipe === "violation"
+        );
+        const achievementReports = student.reports.filter(
+          (r) => r.tipe === "achievement"
+        );
+
+        // Calculate student's total violation points
+        const studentViolationPoints = violationReports.reduce(
+          (sum, sv) => sum + (sv.pointSaat || sv.violation?.point || 0),
+          0
+        );
+
+        // Calculate student's total achievement points
+        const studentAchievementPoints = achievementReports.reduce(
+          (sum, sa) => sum + (sa.pointSaat || sa.achievement?.point || 0),
+          0
+        );
+
+        totalViolationPoints += studentViolationPoints;
+        totalAchievementPoints += studentAchievementPoints;
+
+        // Determine risk level
+        const totalScore = studentAchievementPoints - studentViolationPoints;
+        if (studentViolationPoints >= 100 || totalScore <= -50) {
+          highRiskStudents++;
+        } else if (studentViolationPoints >= 50 || totalScore <= -20) {
+          mediumRiskStudents++;
+        } else {
+          lowRiskStudents++;
+        }
+      });
+
+      return {
+        id: classroom.id,
+        kodeKelas: classroom.kodeKelas,
+        namaKelas: classroom.namaKelas,
+        jmlSiswa: classroom.jmlSiswa,
+        waliKelas: classroom.waliKelas?.user?.name || null,
+        totalStudents: classroom._count.students,
+        totalViolationPoints,
+        totalAchievementPoints,
+        averageScore:
+          classroom._count.students > 0
+            ? Math.round(
+                (totalAchievementPoints - totalViolationPoints) /
+                  classroom._count.students
+              )
+            : 0,
+        riskDistribution: {
+          high: highRiskStudents,
+          medium: mediumRiskStudents,
+          low: lowRiskStudents,
+        },
+      };
+    });
+
+    res.json({
+      message: "Classrooms retrieved successfully",
+      data: classroomStats,
+    });
+  } catch (err) {
+    console.error("Error getting classrooms:", err);
+    res.status(500).json({ error: "Failed to fetch classrooms" });
+  }
+};
+
 module.exports = {
   getBKDashboard,
   getStudentsForMonitoring,
   getStudentDetailForBK,
   getViolationTrends,
+  getClassrooms,
 };
