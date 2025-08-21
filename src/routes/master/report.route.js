@@ -8,6 +8,7 @@ const {
   deleteStudentReport,
   adjustStudentPoints,
   getPointAdjustmentHistory,
+  recalculateAllTotalScores,
   getAllStudents,
 } = require("../../controllers/Master/report.controller");
 
@@ -67,6 +68,16 @@ router.get(
   authenticate,
   requireRole(["bk", "superadmin"]),
   getPointAdjustmentHistory
+);
+
+// ==================== UTILITY ROUTES ====================
+
+// Recalculate all student total scores - Only superadmin can do this
+router.post(
+  "/recalculate-scores",
+  authenticate,
+  requireRole(["superadmin"]),
+  recalculateAllTotalScores
 );
 
 // ==================== HELPER ROUTES ====================

@@ -4,9 +4,6 @@ const prisma = new PrismaClient();
 // Manage Master Data - Superadmin Functions
 const getAllClassrooms = async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
     const [classrooms, total] = await Promise.all([
       prisma.classroom.findMany({
         include: {
@@ -26,9 +23,7 @@ const getAllClassrooms = async (req, res) => {
             },
           },
         },
-        orderBy: { namaKelas: "asc" },
-        skip,
-        take: parseInt(limit),
+        orderBy: { namaKelas: "desc" },
       }),
       prisma.classroom.count(),
     ]);
@@ -45,12 +40,6 @@ const getAllClassrooms = async (req, res) => {
 
     res.json({
       data: formattedClassrooms,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        totalPages: Math.ceil(total / parseInt(limit)),
-      },
     });
   } catch (err) {
     console.error("Error getting classrooms:", err);

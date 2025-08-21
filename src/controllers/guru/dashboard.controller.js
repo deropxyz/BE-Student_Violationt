@@ -11,17 +11,11 @@ const getGuruDashboard = async (req, res) => {
       where: { userId },
       include: {
         user: true,
-        waliKelas: {
+        classrooms: {
           include: {
             students: {
               include: {
                 user: true,
-                _count: {
-                  select: {
-                    violations: true,
-                    achievements: true,
-                  },
-                },
               },
             },
           },
@@ -33,7 +27,7 @@ const getGuruDashboard = async (req, res) => {
       return res.status(404).json({ error: "Teacher not found" });
     }
 
-    const isWaliKelas = !!teacher.waliKelas;
+    const isWaliKelas = teacher.classrooms.length > 0;
 
     // Base statistics
     const stats = {
@@ -42,13 +36,13 @@ const getGuruDashboard = async (req, res) => {
         name: teacher.user.name,
         email: teacher.user.email,
         nip: teacher.nip,
-        mapel: teacher.mapel,
+        noHp: teacher.noHp,
       },
     };
 
     if (isWaliKelas) {
       // Wali Kelas specific dashboard
-      const classroom = teacher.waliKelas;
+      const classroom = teacher.classrooms[0]; // Ambil kelas pertama (seharusnya hanya 1)
       const students = classroom.students;
 
       // Calculate classroom statistics
@@ -72,11 +66,12 @@ const getGuruDashboard = async (req, res) => {
 
       // Get recent violations and achievements for the class
       const [recentViolations, recentAchievements] = await Promise.all([
-        prisma.studentViolation.findMany({
+        prisma.studentReport.findMany({
           where: {
             student: {
               classroomId: classroom.id,
             },
+            tipe: "violation",
             createdAt: {
               gte: oneMonthAgo,
             },
@@ -88,15 +83,17 @@ const getGuruDashboard = async (req, res) => {
                 user: true,
               },
             },
+            reporter: true,
           },
           orderBy: { createdAt: "desc" },
           take: 10,
         }),
-        prisma.studentAchievement.findMany({
+        prisma.studentReport.findMany({
           where: {
             student: {
               classroomId: classroom.id,
             },
+            tipe: "achievement",
             createdAt: {
               gte: oneMonthAgo,
             },
@@ -108,6 +105,7 @@ const getGuruDashboard = async (req, res) => {
                 user: true,
               },
             },
+            reporter: true,
           },
           orderBy: { createdAt: "desc" },
           take: 10,
@@ -124,19 +122,19 @@ const getGuruDashboard = async (req, res) => {
           nisn: s.nisn,
           nama: s.user.name,
           totalScore: s.totalScore,
-          violationCount: s._count.violations,
-          achievementCount: s._count.achievements,
+          violationCount: 0, // Will be calculated separately
+          achievementCount: 0, // Will be calculated separately
         }));
 
       stats.classroom = {
         id: classroom.id,
-        nama: classroom.nama,
+        nama: classroom.namaKelas,
         statistics: classroomStats,
         studentsNeedingAttention,
         recentViolations: recentViolations.map((v) => ({
           id: v.id,
           studentName: v.student.user.name,
-          violationName: v.violation.nama,
+          violationName: v.violation?.nama || "Unknown",
           point: v.pointSaat,
           tanggal: v.tanggal,
           createdAt: v.createdAt,
@@ -144,7 +142,7 @@ const getGuruDashboard = async (req, res) => {
         recentAchievements: recentAchievements.map((a) => ({
           id: a.id,
           studentName: a.student.user.name,
-          achievementName: a.achievement.nama,
+          achievementName: a.achievement?.nama || "Unknown",
           point: a.pointSaat,
           tanggal: a.tanggal,
           createdAt: a.createdAt,
@@ -152,29 +150,40 @@ const getGuruDashboard = async (req, res) => {
       };
     } else {
       // Regular teacher dashboard
-      stats.generalStats = await Promise.all([
-        prisma.student.count(),
-        prisma.studentViolation.count({
-          where: {
-            createdAt: {
-              gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+      const [totalStudents, violationsThisMonth, achievementsThisMonth] =
+        await Promise.all([
+          prisma.student.count(),
+          prisma.studentReport.count({
+            where: {
+              tipe: "violation",
+              createdAt: {
+                gte: new Date(
+                  new Date().getFullYear(),
+                  new Date().getMonth(),
+                  1
+                ),
+              },
             },
-          },
-        }),
-        prisma.studentAchievement.count({
-          where: {
-            createdAt: {
-              gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+          }),
+          prisma.studentReport.count({
+            where: {
+              tipe: "achievement",
+              createdAt: {
+                gte: new Date(
+                  new Date().getFullYear(),
+                  new Date().getMonth(),
+                  1
+                ),
+              },
             },
-          },
-        }),
-      ]).then(
-        ([totalStudents, violationsThisMonth, achievementsThisMonth]) => ({
-          totalStudents,
-          violationsThisMonth,
-          achievementsThisMonth,
-        })
-      );
+          }),
+        ]);
+
+      stats.generalStats = {
+        totalStudents,
+        violationsThisMonth,
+        achievementsThisMonth,
+      };
     }
 
     res.json(stats);
@@ -192,22 +201,24 @@ const getMyClassStudents = async (req, res) => {
     const teacher = await prisma.teacher.findUnique({
       where: { userId },
       include: {
-        waliKelas: true,
+        classrooms: true,
       },
     });
 
-    if (!teacher || !teacher.waliKelas) {
+    if (!teacher || teacher.classrooms.length === 0) {
       return res
         .status(403)
         .json({ error: "You are not assigned as wali kelas" });
     }
+
+    const classroom = teacher.classrooms[0]; // Ambil kelas pertama
 
     const { page = 1, limit = 10 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const [students, total] = await Promise.all([
       prisma.student.findMany({
-        where: { classroomId: teacher.waliKelas.id },
+        where: { classroomId: classroom.id },
         include: {
           user: {
             select: {
@@ -220,13 +231,8 @@ const getMyClassStudents = async (req, res) => {
               tahun: true,
             },
           },
-          _count: {
-            select: {
-              violations: true,
-              achievements: true,
-            },
-          },
-          violations: {
+          reports: {
+            where: { tipe: "violation" },
             orderBy: { createdAt: "desc" },
             take: 3,
             include: {
@@ -243,7 +249,7 @@ const getMyClassStudents = async (req, res) => {
         skip,
         take: parseInt(limit),
       }),
-      prisma.student.count({ where: { classroomId: teacher.waliKelas.id } }),
+      prisma.student.count({ where: { classroomId: classroom.id } }),
     ]);
 
     const formattedStudents = students.map((s) => {
@@ -262,18 +268,18 @@ const getMyClassStudents = async (req, res) => {
         angkatan: s.angkatan?.tahun,
         totalScore: s.totalScore,
         riskLevel,
-        violationCount: s._count.violations,
-        achievementCount: s._count.achievements,
-        recentViolations: s.violations.map((v) => ({
-          nama: v.violation.nama,
-          point: v.violation.point,
-          tanggal: v.createdAt,
+        violationCount: s.reports.length,
+        achievementCount: 0, // Will need separate query for achievements
+        recentViolations: s.reports.map((r) => ({
+          nama: r.violation?.nama || "Unknown",
+          point: r.violation?.point || 0,
+          tanggal: r.createdAt,
         })),
       };
     });
 
     res.json({
-      classroom: teacher.waliKelas.nama,
+      classroom: classroom.namaKelas,
       data: formattedStudents,
       pagination: {
         page: parseInt(page),
@@ -296,16 +302,11 @@ const getClassStatistics = async (req, res) => {
     const teacher = await prisma.teacher.findUnique({
       where: { userId },
       include: {
-        waliKelas: {
+        classrooms: {
           include: {
             students: {
               include: {
-                _count: {
-                  select: {
-                    violations: true,
-                    achievements: true,
-                  },
-                },
+                user: true,
               },
             },
           },
@@ -313,19 +314,19 @@ const getClassStatistics = async (req, res) => {
       },
     });
 
-    if (!teacher || !teacher.waliKelas) {
+    if (!teacher || teacher.classrooms.length === 0) {
       return res
         .status(403)
         .json({ error: "You are not assigned as wali kelas" });
     }
 
-    const classroom = teacher.waliKelas;
+    const classroom = teacher.classrooms[0];
     const students = classroom.students;
 
     // Calculate detailed statistics
     const stats = {
       overview: {
-        className: classroom.nama,
+        className: classroom.namaKelas,
         totalStudents: students.length,
         maleStudents: students.filter((s) => s.gender === "L").length,
         femaleStudents: students.filter((s) => s.gender === "P").length,
@@ -340,14 +341,6 @@ const getClassStatistics = async (req, res) => {
       },
 
       performance: {
-        totalViolations: students.reduce(
-          (sum, s) => sum + s._count.violations,
-          0
-        ),
-        totalAchievements: students.reduce(
-          (sum, s) => sum + s._count.achievements,
-          0
-        ),
         averageScore:
           students.length > 0
             ? (
@@ -371,7 +364,6 @@ const getClassStatistics = async (req, res) => {
             nisn: s.nisn,
             nama: s.user?.name,
             totalScore: s.totalScore,
-            violationCount: s._count.violations,
           })),
       },
     };

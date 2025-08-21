@@ -1,4 +1,9 @@
 const { PrismaClient } = require("@prisma/client");
+const {
+  validateActiveAcademicYear,
+  getTargetAcademicYear,
+  canCreateReports,
+} = require("../utils/academicYearUtils");
 const prisma = new PrismaClient();
 
 // Get violation statistics per week/month

@@ -172,7 +172,9 @@ const getStudentsForMonitoring = async (req, res) => {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    let filter = {};
+    let filter = {
+      isArchived: false, // Only show non-graduated students
+    };
     if (classroomId) filter.classroomId = parseInt(classroomId);
     if (angkatanId) filter.angkatanId = parseInt(angkatanId);
 
@@ -678,10 +680,539 @@ const getClassrooms = async (req, res) => {
   }
 };
 
+// Get BK statistics by academic year
+const getBKDashboardByAcademicYear = async (req, res) => {
+  const { tahunAjaranId } = req.query;
+
+  try {
+    let academicYear;
+    if (tahunAjaranId) {
+      academicYear = await prisma.tahunAjaran.findUnique({
+        where: { id: parseInt(tahunAjaranId) },
+      });
+    } else {
+      academicYear = await prisma.tahunAjaran.findFirst({
+        where: { isActive: true },
+      });
+    }
+
+    if (!academicYear) {
+      return res.status(404).json({ error: "Academic year not found" });
+    }
+
+    const dateFilter = {
+      gte: academicYear.tanggalMulai,
+      lte: academicYear.tanggalSelesai,
+    };
+
+    const [
+      totalStudents,
+      totalViolations,
+      totalAchievements,
+      totalReports,
+      highRiskStudents,
+      mediumRiskStudents,
+      lowRiskStudents,
+      topViolations,
+    ] = await Promise.all([
+      // Total students
+      prisma.student.count(),
+
+      // Total violations in academic year
+      prisma.studentReport.count({
+        where: {
+          tipe: "violation",
+          tanggal: dateFilter,
+        },
+      }),
+
+      // Total achievements in academic year
+      prisma.studentReport.count({
+        where: {
+          tipe: "achievement",
+          tanggal: dateFilter,
+        },
+      }),
+
+      // Total reports in academic year
+      prisma.studentReport.count({
+        where: {
+          tanggal: dateFilter,
+        },
+      }),
+
+      // High risk students
+      prisma.student.count({
+        where: { totalScore: { lt: -50 } },
+      }),
+
+      // Medium risk students
+      prisma.student.count({
+        where: {
+          totalScore: { gte: -50, lt: 0 },
+        },
+      }),
+
+      // Low risk students
+      prisma.student.count({
+        where: { totalScore: { gte: 0 } },
+      }),
+
+      // Top violations in academic year
+      prisma.violation.findMany({
+        include: {
+          reports: {
+            where: {
+              tanggal: dateFilter,
+            },
+            select: { id: true },
+          },
+        },
+        orderBy: {
+          reports: {
+            _count: "desc",
+          },
+        },
+        take: 5,
+      }),
+    ]);
+
+    res.json({
+      academicYear,
+      statistics: {
+        totalStudents,
+        totalViolations,
+        totalAchievements,
+        totalReports,
+        riskDistribution: {
+          high: highRiskStudents,
+          medium: mediumRiskStudents,
+          low: lowRiskStudents,
+        },
+      },
+      topViolations: topViolations.map((violation) => ({
+        id: violation.id,
+        nama: violation.nama,
+        kategori: violation.kategori,
+        point: violation.point,
+        count: violation.reports.length,
+      })),
+    });
+  } catch (err) {
+    console.error("Error getting BK dashboard by academic year:", err);
+    res.status(500).json({ error: "Failed to fetch dashboard data" });
+  }
+};
+
+// Get violation trends by academic year
+const getViolationTrendsByAcademicYear = async (req, res) => {
+  const { tahunAjaranId } = req.query;
+
+  try {
+    let academicYear;
+    if (tahunAjaranId) {
+      academicYear = await prisma.tahunAjaran.findUnique({
+        where: { id: parseInt(tahunAjaranId) },
+      });
+    } else {
+      academicYear = await prisma.tahunAjaran.findFirst({
+        where: { isActive: true },
+      });
+    }
+
+    if (!academicYear) {
+      return res.status(404).json({ error: "Academic year not found" });
+    }
+
+    const violationReports = await prisma.studentReport.findMany({
+      where: {
+        tipe: "violation",
+        tanggal: {
+          gte: academicYear.tanggalMulai,
+          lte: academicYear.tanggalSelesai,
+        },
+      },
+      include: {
+        violation: {
+          select: {
+            nama: true,
+            kategori: true,
+          },
+        },
+      },
+      select: {
+        tanggal: true,
+        violation: true,
+      },
+    });
+
+    // Group by month
+    const monthlyData = {};
+    violationReports.forEach((report) => {
+      const month = new Date(report.tanggal).toISOString().slice(0, 7);
+      if (!monthlyData[month]) {
+        monthlyData[month] = { month, count: 0, categories: {} };
+      }
+      monthlyData[month].count++;
+
+      const category = report.violation?.kategori || "Unknown";
+      monthlyData[month].categories[category] =
+        (monthlyData[month].categories[category] || 0) + 1;
+    });
+
+    const trends = Object.values(monthlyData).sort((a, b) =>
+      a.month.localeCompare(b.month)
+    );
+
+    res.json({
+      academicYear,
+      trends,
+      summary: {
+        totalViolations: violationReports.length,
+        averagePerMonth: violationReports.length / 12,
+      },
+    });
+  } catch (err) {
+    console.error("Error getting violation trends by academic year:", err);
+    res.status(500).json({ error: "Failed to fetch violation trends" });
+  }
+};
+
+// Get students monitoring by academic year
+const getStudentsMonitoringByAcademicYear = async (req, res) => {
+  const {
+    tahunAjaranId,
+    riskLevel,
+    classroomId,
+    angkatanId,
+    search,
+    page = 1,
+    limit = 10,
+  } = req.query;
+
+  try {
+    let academicYear;
+    if (tahunAjaranId) {
+      academicYear = await prisma.tahunAjaran.findUnique({
+        where: { id: parseInt(tahunAjaranId) },
+      });
+    } else {
+      academicYear = await prisma.tahunAjaran.findFirst({
+        where: { isActive: true },
+      });
+    }
+
+    if (!academicYear) {
+      return res.status(404).json({ error: "Academic year not found" });
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    let filter = {};
+    if (classroomId) filter.classroomId = parseInt(classroomId);
+    if (angkatanId) filter.angkatanId = parseInt(angkatanId);
+
+    // Add search filter
+    if (search) {
+      filter.OR = [
+        { nisn: { contains: search, mode: "insensitive" } },
+        { user: { name: { contains: search, mode: "insensitive" } } },
+      ];
+    }
+
+    // Add risk level filter
+    if (riskLevel) {
+      if (riskLevel === "HIGH") {
+        filter.totalScore = { lt: -50 };
+      } else if (riskLevel === "MEDIUM") {
+        filter.totalScore = { gte: -50, lt: 0 };
+      } else if (riskLevel === "LOW") {
+        filter.totalScore = { gte: 0 };
+      }
+    }
+
+    const [students, total] = await Promise.all([
+      prisma.student.findMany({
+        where: filter,
+        include: {
+          user: { select: { name: true, email: true } },
+          classroom: { select: { namaKelas: true } },
+          angkatan: { select: { tahun: true } },
+          reports: {
+            where: {
+              tanggal: {
+                gte: academicYear.tanggalMulai,
+                lte: academicYear.tanggalSelesai,
+              },
+            },
+            include: {
+              violation: { select: { nama: true, point: true } },
+              achievement: { select: { nama: true, point: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 3,
+          },
+        },
+        orderBy: { totalScore: "asc" },
+        skip,
+        take: parseInt(limit),
+      }),
+      prisma.student.count({ where: filter }),
+    ]);
+
+    const formattedStudents = students.map((s) => {
+      let riskLevel = "LOW";
+      if (s.totalScore < -50) riskLevel = "HIGH";
+      else if (s.totalScore < 0) riskLevel = "MEDIUM";
+
+      // Filter reports by academic year and type
+      const academicYearReports = s.reports.filter((r) => {
+        const reportDate = new Date(r.tanggal);
+        return (
+          reportDate >= academicYear.tanggalMulai &&
+          reportDate <= academicYear.tanggalSelesai
+        );
+      });
+
+      const violationReports = academicYearReports.filter(
+        (r) => r.tipe === "violation"
+      );
+      const achievementReports = academicYearReports.filter(
+        (r) => r.tipe === "achievement"
+      );
+
+      return {
+        id: s.id,
+        nisn: s.nisn,
+        nama: s.user?.name,
+        email: s.user?.email,
+        kelas: s.classroom?.namaKelas,
+        angkatan: s.angkatan?.tahun,
+        totalScore: s.totalScore,
+        riskLevel,
+        academicYearStats: {
+          totalViolations: violationReports.length,
+          totalAchievements: achievementReports.length,
+          totalViolationPoints: violationReports.reduce(
+            (sum, r) => sum + (r.pointSaat || 0),
+            0
+          ),
+          totalAchievementPoints: achievementReports.reduce(
+            (sum, r) => sum + (r.pointSaat || 0),
+            0
+          ),
+        },
+        recentReports: academicYearReports.slice(0, 3).map((r) => ({
+          tipe: r.tipe,
+          nama: r.violation?.nama || r.achievement?.nama || "Unknown",
+          point: r.pointSaat || r.violation?.point || r.achievement?.point || 0,
+          tanggal: r.tanggal,
+        })),
+      };
+    });
+
+    res.json({
+      academicYear,
+      data: formattedStudents,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit)),
+      },
+    });
+  } catch (err) {
+    console.error("Error getting students monitoring by academic year:", err);
+    res.status(500).json({ error: "Failed to fetch students" });
+  }
+};
+
+// Get BK historical stats for rekap laporan (similar to superadmin stats)
+const getBKHistoricalStats = async (req, res) => {
+  const { tahunAjaranId } = req.query;
+
+  try {
+    let academicYear;
+    if (tahunAjaranId) {
+      academicYear = await prisma.tahunAjaran.findUnique({
+        where: { id: parseInt(tahunAjaranId) },
+      });
+    } else {
+      academicYear = await prisma.tahunAjaran.findFirst({
+        where: { isActive: true },
+      });
+    }
+
+    if (!academicYear) {
+      return res.status(404).json({ error: "Academic year not found" });
+    }
+
+    const dateFilter = {
+      gte: academicYear.tanggalMulai,
+      lte: academicYear.tanggalSelesai,
+    };
+
+    // Get basic stats
+    const [totalReports, violationReports, achievementReports, activeStudents] =
+      await Promise.all([
+        prisma.studentReport.count({
+          where: { tanggal: dateFilter },
+        }),
+        prisma.studentReport.count({
+          where: { tipe: "violation", tanggal: dateFilter },
+        }),
+        prisma.studentReport.count({
+          where: { tipe: "achievement", tanggal: dateFilter },
+        }),
+        prisma.student.count(),
+      ]);
+
+    // Calculate average reports per month
+    const startDate = new Date(academicYear.tanggalMulai);
+    const endDate = new Date(academicYear.tanggalSelesai);
+    const monthsDiff =
+      (endDate.getFullYear() - startDate.getFullYear()) * 12 +
+      (endDate.getMonth() - startDate.getMonth()) +
+      1;
+    const averageReportsPerMonth = Math.round(totalReports / monthsDiff);
+
+    // Get monthly reports data
+    const monthlyReports = await prisma.$queryRaw`
+      SELECT 
+        EXTRACT(MONTH FROM tanggal) as month,
+        EXTRACT(YEAR FROM tanggal) as year,
+        COUNT(*) as count
+      FROM "StudentReport" 
+      WHERE tanggal >= ${academicYear.tanggalMulai} 
+        AND tanggal <= ${academicYear.tanggalSelesai}
+      GROUP BY EXTRACT(YEAR FROM tanggal), EXTRACT(MONTH FROM tanggal)
+      ORDER BY year, month
+    `;
+
+    // Get reports by class
+    const reportsByClass = await prisma.$queryRaw`
+      SELECT 
+        c."namaKelas" as name,
+        COUNT(sr.id) as count
+      FROM "StudentReport" sr
+      JOIN "Student" s ON sr."studentId" = s.id
+      JOIN "Classroom" c ON s."classroomId" = c.id
+      WHERE sr.tanggal >= ${academicYear.tanggalMulai} 
+        AND sr.tanggal <= ${academicYear.tanggalSelesai}
+      GROUP BY c."namaKelas"
+      ORDER BY count DESC
+    `;
+
+    // Get reports by type
+    const reportsByType = [
+      {
+        name: "Pelanggaran",
+        type: "violation",
+        count: violationReports,
+      },
+      {
+        name: "Prestasi",
+        type: "achievement",
+        count: achievementReports,
+      },
+    ];
+
+    res.json({
+      totalReports,
+      violationReports,
+      achievementReports,
+      activeStudents,
+      averageReportsPerMonth,
+      monthlyReports: monthlyReports.map((row) => ({
+        month: Number(row.month),
+        year: Number(row.year),
+        count: Number(row.count),
+      })),
+      reportsByClass: reportsByClass.map((row) => ({
+        name: row.name,
+        count: Number(row.count),
+      })),
+      reportsByType,
+    });
+  } catch (err) {
+    console.error("Error getting BK historical stats:", err);
+    res.status(500).json({ error: "Failed to fetch historical stats" });
+  }
+};
+
+// Get BK recent reports for rekap laporan
+const getBKRecentReports = async (req, res) => {
+  const { tahunAjaranId } = req.query;
+
+  try {
+    let academicYear;
+    if (tahunAjaranId) {
+      academicYear = await prisma.tahunAjaran.findUnique({
+        where: { id: parseInt(tahunAjaranId) },
+      });
+    } else {
+      academicYear = await prisma.tahunAjaran.findFirst({
+        where: { isActive: true },
+      });
+    }
+
+    if (!academicYear) {
+      return res.status(404).json({ error: "Academic year not found" });
+    }
+
+    const recentReports = await prisma.studentReport.findMany({
+      where: {
+        tanggal: {
+          gte: academicYear.tanggalMulai,
+          lte: academicYear.tanggalSelesai,
+        },
+      },
+      include: {
+        student: {
+          include: {
+            classroom: true,
+          },
+        },
+        violation: true,
+        achievement: true,
+        reporter: true,
+      },
+      orderBy: {
+        tanggal: "desc",
+      },
+      take: 10,
+    });
+
+    res.json({
+      recentReports: recentReports.map((report) => ({
+        id: report.id,
+        tanggal: report.tanggal,
+        tipe: report.tipe,
+        studentId: report.student.id,
+        studentName: report.student.nama,
+        className: report.student.classroom?.namaKelas || "Tidak Diketahui",
+        violationName: report.violation?.nama || null,
+        achievementName: report.achievement?.nama || null,
+        teacherName: report.reporter?.nama || "Sistem",
+        point: report.pointSaat,
+        keterangan: report.deskripsi,
+      })),
+    });
+  } catch (err) {
+    console.error("Error getting BK recent reports:", err);
+    res.status(500).json({ error: "Failed to fetch recent reports" });
+  }
+};
+
 module.exports = {
   getBKDashboard,
   getStudentsForMonitoring,
   getStudentDetailForBK,
   getViolationTrends,
   getClassrooms,
+  getBKDashboardByAcademicYear,
+  getViolationTrendsByAcademicYear,
+  getStudentsMonitoringByAcademicYear,
+  getBKHistoricalStats,
+  getBKRecentReports,
 };

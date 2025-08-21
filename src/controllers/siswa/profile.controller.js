@@ -29,7 +29,7 @@ const getMyProfile = async (req, res) => {
         classroom: {
           select: {
             id: true,
-            nama: true,
+            namaKelas: true,
             waliKelas: {
               select: {
                 user: {
@@ -48,8 +48,6 @@ const getMyProfile = async (req, res) => {
             tahun: true,
           },
         },
-        createdAt: true,
-        updatedAt: true,
       },
     });
 
@@ -61,21 +59,22 @@ const getMyProfile = async (req, res) => {
     const response = {
       id: student.id,
       nisn: student.nisn,
-      nama: student.user?.name || null,
-      email: student.user?.email || null,
+      user: {
+        name: student.user?.name || null,
+        email: student.user?.email || null,
+        role: student.user?.role || null,
+      },
       jenisKelamin: student.gender,
       tempatLahir: student.tempatLahir,
       tglLahir: student.tglLahir,
       alamat: student.alamat,
-      noHp: student.noHp,
-      kelas: student.classroom?.nama || null,
+      phone: student.noHp,
+      kelas: student.classroom?.namaKelas || null,
       angkatan: student.angkatan?.tahun || null,
       waliKelas: student.classroom?.waliKelas?.user?.name || null,
       totalScore: student.totalScore,
       classroomId: student.classroom?.id || null,
       angkatanId: student.angkatan?.id || null,
-      createdAt: student.createdAt,
-      updatedAt: student.updatedAt,
     };
 
     res.json(response);
@@ -89,7 +88,7 @@ const updateMyProfile = async (req, res) => {
   const userId = req.user.id;
 
   try {
-    const { name, email, alamat, noHp, tempatLahir, tglLahir } = req.body;
+    const { name, email, alamat, phone, tempatLahir, tglLahir } = req.body;
 
     // Find student by userId
     const student = await prisma.student.findUnique({
@@ -125,7 +124,7 @@ const updateMyProfile = async (req, res) => {
       where: { id: student.id },
       data: {
         alamat,
-        noHp,
+        noHp: phone,
         tempatLahir,
         tglLahir: tglLahir ? new Date(tglLahir) : undefined,
       },
@@ -146,7 +145,7 @@ const updateMyProfile = async (req, res) => {
         },
         classroom: {
           select: {
-            nama: true,
+            namaKelas: true,
           },
         },
         angkatan: {
@@ -154,24 +153,24 @@ const updateMyProfile = async (req, res) => {
             tahun: true,
           },
         },
-        updatedAt: true,
       },
     });
 
     const response = {
       id: updatedStudent.id,
       nisn: updatedStudent.nisn,
-      nama: updatedStudent.user?.name || null,
-      email: updatedStudent.user?.email || null,
+      user: {
+        name: updatedStudent.user?.name || null,
+        email: updatedStudent.user?.email || null,
+      },
       jenisKelamin: updatedStudent.gender,
       tempatLahir: updatedStudent.tempatLahir,
       tglLahir: updatedStudent.tglLahir,
       alamat: updatedStudent.alamat,
-      noHp: updatedStudent.noHp,
-      kelas: updatedStudent.classroom?.nama || null,
+      phone: updatedStudent.noHp,
+      kelas: updatedStudent.classroom?.namaKelas || null,
       angkatan: updatedStudent.angkatan?.tahun || null,
       totalScore: updatedStudent.totalScore,
-      updatedAt: updatedStudent.updatedAt,
     };
 
     res.json({

@@ -41,7 +41,7 @@ const getMyDashboard = async (req, res) => {
         classroom: {
           select: {
             id: true,
-            nama: true,
+            namaKelas: true,
             waliKelas: {
               select: {
                 user: {
@@ -61,10 +61,11 @@ const getMyDashboard = async (req, res) => {
           },
         },
 
-        // Semua pelanggaran siswa dengan detail violation
-        violations: {
+        // Semua laporan siswa (pelanggaran dan prestasi)
+        reports: {
           select: {
             id: true,
+            tipe: true,
             pointSaat: true,
             deskripsi: true,
             tanggal: true,
@@ -77,24 +78,6 @@ const getMyDashboard = async (req, res) => {
                 point: true,
               },
             },
-            reporter: {
-              select: {
-                name: true,
-                role: true,
-              },
-            },
-          },
-          orderBy: { createdAt: "desc" },
-        },
-
-        // Semua prestasi siswa dengan detail achievement
-        achievements: {
-          select: {
-            id: true,
-            pointSaat: true,
-            deskripsi: true,
-            tanggal: true,
-            createdAt: true,
             achievement: {
               select: {
                 nama: true,
@@ -111,9 +94,6 @@ const getMyDashboard = async (req, res) => {
           },
           orderBy: { createdAt: "desc" },
         },
-
-        createdAt: true,
-        updatedAt: true,
       },
     });
 
@@ -122,8 +102,11 @@ const getMyDashboard = async (req, res) => {
     }
 
     // Kalkulasi statistik dari data yang sudah diambil
-    const violations = studentData.violations || [];
-    const achievements = studentData.achievements || [];
+    const reports = studentData.reports || [];
+    const violations = reports.filter((report) => report.tipe === "violation");
+    const achievements = reports.filter(
+      (report) => report.tipe === "achievement"
+    );
 
     const now = new Date();
     const oneMonthAgo = new Date(
@@ -197,7 +180,7 @@ const getMyDashboard = async (req, res) => {
         alamat: studentData.alamat,
         noHp: studentData.noHp,
         email: studentData.user?.email || null,
-        kelas: studentData.classroom?.nama || null,
+        kelas: studentData.classroom?.namaKelas || null,
         angkatan: studentData.angkatan?.tahun || null,
         waliKelas: studentData.classroom?.waliKelas?.user?.name || null,
         classroomId: studentData.classroom?.id || null,
@@ -212,8 +195,8 @@ const getMyDashboard = async (req, res) => {
       },
 
       // Data mentah untuk frontend processing
-      violations: studentData.violations,
-      achievements: studentData.achievements,
+      violations: violations,
+      achievements: achievements,
 
       // Data yang sudah diproses untuk kemudahan frontend
       recentActivity,
@@ -250,8 +233,11 @@ const getMyViolations = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const [violations, total] = await Promise.all([
-      prisma.studentViolation.findMany({
-        where: { studentId: student.id },
+      prisma.studentReport.findMany({
+        where: {
+          studentId: student.id,
+          tipe: "violation",
+        },
         include: {
           violation: true,
           reporter: {
@@ -267,8 +253,11 @@ const getMyViolations = async (req, res) => {
         skip,
         take: parseInt(limit),
       }),
-      prisma.studentViolation.count({
-        where: { studentId: student.id },
+      prisma.studentReport.count({
+        where: {
+          studentId: student.id,
+          tipe: "violation",
+        },
       }),
     ]);
 
@@ -305,8 +294,11 @@ const getMyAchievements = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const [achievements, total] = await Promise.all([
-      prisma.studentAchievement.findMany({
-        where: { studentId: student.id },
+      prisma.studentReport.findMany({
+        where: {
+          studentId: student.id,
+          tipe: "achievement",
+        },
         include: {
           achievement: true,
           reporter: {
@@ -322,8 +314,11 @@ const getMyAchievements = async (req, res) => {
         skip,
         take: parseInt(limit),
       }),
-      prisma.studentAchievement.count({
-        where: { studentId: student.id },
+      prisma.studentReport.count({
+        where: {
+          studentId: student.id,
+          tipe: "achievement",
+        },
       }),
     ]);
 

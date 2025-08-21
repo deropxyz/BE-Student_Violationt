@@ -1,4 +1,9 @@
 const { PrismaClient } = require("@prisma/client");
+const {
+  validateActiveAcademicYear,
+  getTargetAcademicYear,
+  canCreateReports,
+} = require("../../utils/academicYearUtils");
 const prisma = new PrismaClient();
 
 // Adjust student points (BK can reduce violation points as a form of rehabilitation)
@@ -137,7 +142,10 @@ const getAllStudents = async (req, res) => {
     const { search, classroomId, limit = 100 } = req.query;
 
     // Build where clause
-    const where = {};
+    const where = {
+      isArchived: false, // Only show non-graduated students
+    };
+
     if (classroomId) where.classroomId = parseInt(classroomId);
 
     if (search) {
@@ -190,6 +198,7 @@ const getAllStudentReports = async (req, res) => {
       endDate,
       kategori,
       jenis,
+      tahunAjaranId, // Filter by academic year
     } = req.query;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -199,6 +208,7 @@ const getAllStudentReports = async (req, res) => {
     if (studentId) where.studentId = parseInt(studentId);
     if (tipe) where.tipe = tipe;
     if (classroomId) where.student = { classroomId: parseInt(classroomId) };
+    if (tahunAjaranId) where.tahunAjaranId = parseInt(tahunAjaranId);
 
     // Filter by violation or achievement category
     if (kategori) {
@@ -380,6 +390,21 @@ const createStudentReport = async (req, res) => {
   const reporterId = req.user.id;
 
   try {
+    // ✅ NEW: Validate active academic year for creating new reports
+    let activeYear;
+    try {
+      activeYear = await validateActiveAcademicYear();
+    } catch (error) {
+      if (error.code === "ACADEMIC_YEAR_REQUIRED") {
+        return res.status(400).json({
+          error: "No active academic year found",
+          message:
+            "Cannot create new reports. Please contact administrator to set active academic year.",
+        });
+      }
+      throw error;
+    }
+
     const {
       studentId,
       tipe, // 'violation' or 'achievement'
@@ -419,6 +444,14 @@ const createStudentReport = async (req, res) => {
 
     if (!student) {
       return res.status(404).json({ error: "Siswa tidak ditemukan" });
+    }
+
+    // Check if student is archived (graduated)
+    if (student.isArchived) {
+      return res.status(400).json({
+        error: "Tidak dapat membuat laporan untuk siswa yang sudah lulus",
+        message: "Siswa ini sudah lulus dan tidak dapat dilaporkan lagi",
+      });
     }
 
     let violation = null;
@@ -471,6 +504,7 @@ const createStudentReport = async (req, res) => {
         tipe,
         violationId: tipe === "violation" ? parseInt(violationId) : null,
         achievementId: tipe === "achievement" ? parseInt(achievementId) : null,
+        tahunAjaranId: activeYear.id, // ✅ NEW: Add academic year relation
         tanggal: new Date(tanggal),
         waktu: parsedWaktu,
         deskripsi,
@@ -781,6 +815,106 @@ const deleteStudentReport = async (req, res) => {
   }
 };
 
+// Recalculate all student total scores based on actual reports
+const recalculateAllTotalScores = async (req, res) => {
+  try {
+    // Get all students
+    const students = await prisma.student.findMany({
+      select: {
+        id: true,
+        nama: true,
+        totalScore: true,
+      },
+    });
+
+    console.log(`Starting recalculation for ${students.length} students...`);
+
+    let updatedCount = 0;
+    const results = [];
+
+    for (const student of students) {
+      // Calculate actual total score from reports
+      const violationReports = await prisma.studentReport.findMany({
+        where: {
+          studentId: student.id,
+          tipe: "violation",
+        },
+        select: {
+          pointSaat: true,
+        },
+      });
+
+      const achievementReports = await prisma.studentReport.findMany({
+        where: {
+          studentId: student.id,
+          tipe: "achievement",
+        },
+        select: {
+          pointSaat: true,
+        },
+      });
+
+      // Calculate correct total score
+      const totalViolationPoints = violationReports.reduce(
+        (sum, report) => sum + (report.pointSaat || 0),
+        0
+      );
+      const totalAchievementPoints = achievementReports.reduce(
+        (sum, report) => sum + (report.pointSaat || 0),
+        0
+      );
+
+      // Violations should subtract from score, achievements should add
+      const correctTotalScore = totalAchievementPoints - totalViolationPoints;
+      const currentTotalScore = student.totalScore;
+
+      if (correctTotalScore !== currentTotalScore) {
+        // Update student total score
+        await prisma.student.update({
+          where: { id: student.id },
+          data: { totalScore: correctTotalScore },
+        });
+
+        // Create score history entry for this correction
+        await prisma.scoreHistory.create({
+          data: {
+            studentId: student.id,
+            pointLama: currentTotalScore,
+            pointBaru: correctTotalScore,
+            alasan: "System recalculation - correcting total score",
+            tanggal: new Date(),
+          },
+        });
+
+        updatedCount++;
+        results.push({
+          studentId: student.id,
+          studentName: student.nama,
+          oldScore: currentTotalScore,
+          newScore: correctTotalScore,
+          difference: correctTotalScore - currentTotalScore,
+          violationPoints: totalViolationPoints,
+          achievementPoints: totalAchievementPoints,
+        });
+
+        console.log(
+          `Updated ${student.nama}: ${currentTotalScore} → ${correctTotalScore}`
+        );
+      }
+    }
+
+    res.json({
+      message: "Total score recalculation completed",
+      totalStudents: students.length,
+      updatedStudents: updatedCount,
+      results: results,
+    });
+  } catch (err) {
+    console.error("Error recalculating total scores:", err);
+    res.status(500).json({ error: "Gagal melakukan recalculation" });
+  }
+};
+
 module.exports = {
   // New Student Report Functions (Combined)
   getAllStudentReports,
@@ -792,6 +926,9 @@ module.exports = {
   // Point Adjustments
   adjustStudentPoints,
   getPointAdjustmentHistory,
+
+  // Utility Functions
+  recalculateAllTotalScores,
 
   // Helper Endpoints
   getAllStudents,

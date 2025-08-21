@@ -4,15 +4,29 @@ const {
   authenticate,
   isSuperadmin,
 } = require("../middlewares/auth.middleware");
+const {
+  getSuperadminDashboard,
+  getSuperadminStatsByAcademicYear,
+  getSystemAnalyticsByAcademicYear,
+  getAllUsers,
+} = require("../controllers/superadmin.controller");
 
-// hanya superadmin yang bisa akses
-router.get("/users", authenticate, isSuperadmin, async (req, res) => {
-  try {
-    const users = await prisma.user.findMany();
-    res.json(users);
-  } catch (err) {
-    res.status(500).json({ message: "Gagal mengambil data user" });
-  }
-});
+// Dashboard routes
+router.get("/dashboard", authenticate, isSuperadmin, getSuperadminDashboard);
+router.get(
+  "/stats-by-year",
+  authenticate,
+  isSuperadmin,
+  getSuperadminStatsByAcademicYear
+);
+router.get(
+  "/analytics-by-year",
+  authenticate,
+  isSuperadmin,
+  getSystemAnalyticsByAcademicYear
+);
+
+// User management
+router.get("/users", authenticate, isSuperadmin, getAllUsers);
 
 module.exports = router;

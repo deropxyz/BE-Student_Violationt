@@ -79,11 +79,11 @@ model Student {
   isArchived  Boolean   @default(false)
   archivedAt  DateTime?
 
-  classroom   Classroom @relation(fields: [classroomId], references: [id])
-  classroomId Int
-  angkatan    Angkatan  @relation(fields: [angkatanId], references: [id])
+  classroom   Classroom? @relation(fields: [classroomId], references: [id])
+  classroomId Int?
+  angkatan    Angkatan   @relation(fields: [angkatanId], references: [id])
   angkatanId  Int
-  orangTua    OrangTua? @relation(fields: [orangTuaId], references: [id])
+  orangTua    OrangTua?  @relation(fields: [orangTuaId], references: [id])
   orangTuaId  Int?
 
   reports       StudentReport[]
@@ -168,6 +168,10 @@ model StudentReport {
   achievement   Achievement? @relation("AchievementReports", fields: [achievementId], references: [id])
   achievementId Int?
 
+  // Relasi dengan TahunAjaran
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  tahunAjaranId Int
+
   tanggal   DateTime  @default(now())
   waktu     DateTime? // waktu kejadian jika berbeda
   deskripsi String?
@@ -228,6 +232,22 @@ model KenaikanKelas {
   gagal      Int
 
   createdAt DateTime @default(now())
+}
+
+// Tabel untuk menyimpan histori perubahan score siswa
+// Tabel untuk tahun ajaran
+model TahunAjaran {
+  id             Int      @id @default(autoincrement())
+  tahunAjaran    String   @unique // "2023/2024"
+  tahunMulai     Int // 2023
+  tahunSelesai   Int // 2024
+  tanggalMulai   DateTime // 2023-07-15
+  tanggalSelesai DateTime // 2024-06-30
+  isActive       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  // Relasi dengan StudentReport
+  reports StudentReport[]
 }
 
 // Tabel untuk menyimpan histori perubahan score siswa

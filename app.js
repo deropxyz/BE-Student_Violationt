@@ -16,6 +16,9 @@ const reportsRoute = require("./src/routes/reports.route");
 const notificationRoute = require("./src/routes/notification.route");
 const uploadRoute = require("./src/routes/upload.route");
 const bkRoute = require("./src/routes/bk.route");
+const guruRoute = require("./src/routes/guru.route");
+const academicYearRoute = require("./src/routes/academicYear.route");
+const studentRoute = require("./src/routes/student.route");
 
 dotenv.config();
 
@@ -55,6 +58,9 @@ app.use("/api/reports", reportsRoute);
 app.use("/api/notifications", notificationRoute);
 app.use("/api/upload", uploadRoute);
 app.use("/api/bk", bkRoute);
+app.use("/api/guru", guruRoute);
+app.use("/api/academic-years", academicYearRoute);
+app.use("/api/student", studentRoute);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
