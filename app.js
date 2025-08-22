@@ -19,6 +19,7 @@ const guruRoute = require("./src/routes/guru.route");
 const academicYearRoute = require("./src/routes/academicYear.route");
 const studentRoute = require("./src/routes/student.route");
 const kategoriRoute = require("./src/routes/master/kategori.route");
+const walikelasRoute = require("./src/routes/walikelas.route");
 
 dotenv.config();
 
@@ -61,6 +62,7 @@ app.use("/api/guru", guruRoute);
 app.use("/api/academic-years", academicYearRoute);
 app.use("/api/student", studentRoute);
 app.use("/api/master/kategori", kategoriRoute);
+app.use("/api/walikelas", walikelasRoute);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

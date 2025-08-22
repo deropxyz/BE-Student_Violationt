@@ -140,6 +140,8 @@ model StudentReport {
   tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
   tahunAjaranId Int
 
+  classAtTime String? // kelas siswa saat laporan dibuat (optional agar migrasi tidak error)
+
   tanggal   DateTime  @default(now())
   waktu     DateTime? // waktu kejadian lebih detail
   deskripsi String?

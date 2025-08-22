@@ -476,6 +476,7 @@ const createStudentReport = async (req, res) => {
         waktu: parsedWaktu,
         deskripsi,
         pointSaat: reportItem.point,
+        classAtTime: student.classroom ? student.classroom.namaKelas : "-", // snapshot kelas saat laporan dibuat
       },
       include: {
         student: { include: { user: true, classroom: true } },
