@@ -14,7 +14,7 @@ const {
 router.post(
   "/generate",
   authenticate,
-  requireRole(["superadmin"]),
+  requireRole("superadmin"),
   generateKenaikanKelas
 );
 
@@ -22,7 +22,7 @@ router.post(
 router.get(
   "/preview",
   authenticate,
-  requireRole(["superadmin"]),
+  requireRole("superadmin"),
   getPromotionPreview
 );
 
@@ -30,7 +30,7 @@ router.get(
 router.delete(
   "/auto-delete-graduates",
   authenticate,
-  requireRole(["superadmin"]),
+  requireRole("superadmin"),
   autoDeleteOldGraduates
 );
 
@@ -38,7 +38,7 @@ router.delete(
 router.get(
   "/archived-students",
   authenticate,
-  requireRole(["superadmin", "bk"]),
+  requireRole("superadmin", "bk"),
   getArchivedStudents
 );
 
@@ -46,7 +46,7 @@ router.get(
 router.get(
   "/",
   authenticate,
-  requireRole(["superadmin", "bk"]),
+  requireRole("superadmin", "bk"),
   getAllKenaikanKelas
 );
 
@@ -54,7 +54,7 @@ router.get(
 router.get(
   "/:id",
   authenticate,
-  requireRole(["superadmin", "bk"]),
+  requireRole("superadmin", "bk"),
   getKenaikanKelasDetail
 );
 

@@ -20,35 +20,35 @@ const {
 router.get(
   "/",
   authenticate,
-  requireRole(["bk", "superadmin", "guru"]),
+  requireRole("bk", "superadmin", "guru"),
   getAllStudentReports
 );
 
 router.get(
   "/report/:reportId",
   authenticate,
-  requireRole(["bk", "superadmin"]),
+  requireRole("bk", "superadmin"),
   getStudentReportById
 );
 
 router.post(
   "/report",
   authenticate,
-  requireRole(["bk", "superadmin", "guru"]),
+  requireRole("bk", "superadmin", "guru"),
   createStudentReport
 );
 
 router.put(
   "/report/:reportId",
   authenticate,
-  requireRole(["bk", "superadmin", "guru"]),
+  requireRole("bk", "superadmin", "guru"),
   updateStudentReport
 );
 
 router.delete(
   "/report/:reportId",
   authenticate,
-  requireRole(["bk", "superadmin"]),
+  requireRole("bk", "superadmin"),
   deleteStudentReport
 );
 
@@ -58,7 +58,7 @@ router.delete(
 router.post(
   "/adjust-points",
   authenticate,
-  requireRole(["bk"]),
+  requireRole("bk"),
   adjustStudentPoints
 );
 
@@ -66,7 +66,7 @@ router.post(
 router.get(
   "/point-history/:studentId",
   authenticate,
-  requireRole(["bk", "superadmin"]),
+  requireRole("bk", "superadmin"),
   getPointAdjustmentHistory
 );
 
@@ -76,7 +76,7 @@ router.get(
 router.post(
   "/recalculate-scores",
   authenticate,
-  requireRole(["superadmin"]),
+  requireRole("superadmin"),
   recalculateAllTotalScores
 );
 
@@ -86,7 +86,7 @@ router.post(
 router.get(
   "/students",
   authenticate,
-  requireRole(["bk", "superadmin", "guru"]),
+  requireRole("bk", "superadmin", "guru"),
   getAllStudents
 );
 

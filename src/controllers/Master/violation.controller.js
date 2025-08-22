@@ -4,10 +4,12 @@ const prisma = new PrismaClient();
 // Ambil semua data pelanggaran
 const getAllViolations = async (req, res) => {
   try {
-    const violations = await prisma.violation.findMany({
+    const violations = await prisma.reportItem.findMany({
+      where: { tipe: "pelanggaran" },
+      include: { kategori: true },
       orderBy: [
         {
-          kategori: "asc",
+          kategoriId: "asc",
         },
         {
           point: "asc",
@@ -24,10 +26,11 @@ const getAllViolations = async (req, res) => {
 const getViolationDetail = async (req, res) => {
   const { id } = req.params;
   try {
-    const violation = await prisma.violation.findUnique({
+    const violation = await prisma.reportItem.findUnique({
       where: { id: parseInt(id) },
+      include: { kategori: true },
     });
-    if (!violation)
+    if (!violation || violation.tipe !== "pelanggaran")
       return res.status(404).json({ error: "Pelanggaran tidak ditemukan" });
     res.json(violation);
   } catch (err) {
@@ -37,15 +40,16 @@ const getViolationDetail = async (req, res) => {
 
 // Tambah pelanggaran
 const createViolation = async (req, res) => {
-  const { nama, kategori, jenis, point, isActive } = req.body;
+  const { nama, kategoriId, point, isActive, jenis } = req.body;
   try {
-    const violation = await prisma.violation.create({
+    const violation = await prisma.reportItem.create({
       data: {
         nama,
-        kategori,
-        jenis,
+        tipe: "pelanggaran",
+        kategoriId: parseInt(kategoriId),
         point: parseInt(point),
         isActive: isActive !== undefined ? isActive : true,
+        jenis: jenis || null,
       },
     });
     res.status(201).json(violation);
@@ -57,16 +61,16 @@ const createViolation = async (req, res) => {
 // Update pelanggaran
 const updateViolation = async (req, res) => {
   const { id } = req.params;
-  const { nama, kategori, jenis, point, isActive } = req.body;
+  const { nama, kategoriId, jenis, point, isActive } = req.body;
   try {
-    const violation = await prisma.violation.update({
+    const violation = await prisma.reportItem.update({
       where: { id: parseInt(id) },
       data: {
         nama,
-        kategori,
-        jenis,
-        point: point ? parseInt(point) : undefined,
+        kategoriId: kategoriId ? parseInt(kategoriId) : undefined,
+        point: point !== undefined ? parseInt(point) : undefined,
         isActive: isActive !== undefined ? isActive : undefined,
+        jenis: jenis !== undefined ? jenis : undefined,
       },
     });
     res.json(violation);
@@ -79,7 +83,7 @@ const updateViolation = async (req, res) => {
 const deleteViolation = async (req, res) => {
   const { id } = req.params;
   try {
-    await prisma.violation.delete({ where: { id: parseInt(id) } });
+    await prisma.reportItem.delete({ where: { id: parseInt(id) } });
     res.json({ message: "Pelanggaran berhasil dihapus" });
   } catch (err) {
     res.status(500).json({ error: "Gagal hapus pelanggaran" });

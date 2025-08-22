@@ -721,23 +721,27 @@ const getBKDashboardByAcademicYear = async (req, res) => {
       // Total violations in academic year
       prisma.studentReport.count({
         where: {
-          tipe: "violation",
-          tanggal: dateFilter,
+          tahunAjaranId: academicYear.id,
+          item: {
+            tipe: "pelanggaran",
+          },
         },
       }),
 
       // Total achievements in academic year
       prisma.studentReport.count({
         where: {
-          tipe: "achievement",
-          tanggal: dateFilter,
+          tahunAjaranId: academicYear.id,
+          item: {
+            tipe: "prestasi",
+          },
         },
       }),
 
       // Total reports in academic year
       prisma.studentReport.count({
         where: {
-          tanggal: dateFilter,
+          tahunAjaranId: academicYear.id,
         },
       }),
 
@@ -759,13 +763,26 @@ const getBKDashboardByAcademicYear = async (req, res) => {
       }),
 
       // Top violations in academic year
-      prisma.violation.findMany({
+      prisma.reportItem.findMany({
+        where: {
+          tipe: "pelanggaran",
+        },
         include: {
+          kategori: true,
           reports: {
             where: {
-              tanggal: dateFilter,
+              tahunAjaranId: academicYear.id,
             },
             select: { id: true },
+          },
+          _count: {
+            select: {
+              reports: {
+                where: {
+                  tahunAjaranId: academicYear.id,
+                },
+              },
+            },
           },
         },
         orderBy: {
@@ -793,14 +810,22 @@ const getBKDashboardByAcademicYear = async (req, res) => {
       topViolations: topViolations.map((violation) => ({
         id: violation.id,
         nama: violation.nama,
-        kategori: violation.kategori,
+        kategori: violation.kategori?.nama || "Tidak ada kategori",
         point: violation.point,
-        count: violation.reports.length,
+        count: violation._count?.reports || 0,
       })),
     });
   } catch (err) {
     console.error("Error getting BK dashboard by academic year:", err);
-    res.status(500).json({ error: "Failed to fetch dashboard data" });
+    console.error("Error details:", {
+      message: err.message,
+      stack: err.stack,
+      tahunAjaranId,
+    });
+    res.status(500).json({
+      error: "Failed to fetch dashboard data",
+      details: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
   }
 };
 

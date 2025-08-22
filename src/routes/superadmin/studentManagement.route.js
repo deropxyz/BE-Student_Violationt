@@ -11,6 +11,7 @@ const {
   createStudent,
   updateStudent,
   deleteStudent,
+  resetStudentPassword,
 } = require("../../controllers/superadmin/studentManagement.controller");
 const {
   authenticate,
@@ -71,6 +72,14 @@ router.delete(
   authenticate,
   requireRole("superadmin"),
   deleteStudent
+);
+
+// Reset student password to default
+router.put(
+  "/:studentId/reset-password",
+  authenticate,
+  requireRole("superadmin"),
+  resetStudentPassword
 );
 
 module.exports = router;

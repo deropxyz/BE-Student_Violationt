@@ -12,13 +12,13 @@ const reportRoute = require("./src/routes/master/report.route");
 const tindakanOtomatisRoute = require("./src/routes/tindakanOtomatis.route");
 const kenaikanKelasRoute = require("./src/routes/kenaikanKelas.route");
 const importRoute = require("./src/routes/import.route");
-const reportsRoute = require("./src/routes/reports.route");
 const notificationRoute = require("./src/routes/notification.route");
 const uploadRoute = require("./src/routes/upload.route");
 const bkRoute = require("./src/routes/bk.route");
 const guruRoute = require("./src/routes/guru.route");
 const academicYearRoute = require("./src/routes/academicYear.route");
 const studentRoute = require("./src/routes/student.route");
+const kategoriRoute = require("./src/routes/master/kategori.route");
 
 dotenv.config();
 
@@ -48,19 +48,19 @@ app.use("/api/superadmin/students", studentManagementRoute);
 app.use("/api/superadmin/teachers", teacherManagementRoute);
 app.use("/api/superadmin/masterdata", masterDataRoute);
 app.use("/api/superadmin", superadminRoute);
-app.use("/api/violations", violationRoute);
-app.use("/api/achievements", achievementRoute);
+app.use("/api/master/violations", violationRoute);
+app.use("/api/master/achievements", achievementRoute);
 app.use("/api/master/reports", reportRoute);
 app.use("/api/tindakan-otomatis", tindakanOtomatisRoute);
 app.use("/api/kenaikan-kelas", kenaikanKelasRoute);
 app.use("/api/import", importRoute);
-app.use("/api/reports", reportsRoute);
 app.use("/api/notifications", notificationRoute);
 app.use("/api/upload", uploadRoute);
 app.use("/api/bk", bkRoute);
 app.use("/api/guru", guruRoute);
 app.use("/api/academic-years", academicYearRoute);
 app.use("/api/student", studentRoute);
+app.use("/api/master/kategori", kategoriRoute);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

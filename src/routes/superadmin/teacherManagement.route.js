@@ -9,6 +9,7 @@ const {
   createTeacher,
   updateTeacher,
   deleteTeacher,
+  resetTeacherPassword,
 } = require("../../controllers/superadmin/teacherManagement.controller");
 const {
   authenticate,
@@ -54,6 +55,14 @@ router.delete(
   authenticate,
   requireRole("superadmin"),
   deleteTeacher
+);
+
+// Reset teacher/BK password to default
+router.put(
+  "/:teacherId/reset-password",
+  authenticate,
+  requireRole("superadmin"),
+  resetTeacherPassword
 );
 
 module.exports = router;

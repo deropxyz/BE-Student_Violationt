@@ -14,19 +14,19 @@ router.get("/:id", achievementController.getAchievementDetail);
 router.post(
   "/",
   authenticate,
-  requireRole(["superadmin", "bk"]),
+  requireRole("superadmin", "bk"),
   achievementController.createAchievement
 );
 router.put(
   "/:id",
   authenticate,
-  requireRole(["superadmin", "bk"]),
+  requireRole("superadmin", "bk"),
   achievementController.updateAchievement
 );
 router.delete(
   "/:id",
   authenticate,
-  requireRole(["superadmin", "bk"]),
+  requireRole("superadmin", "bk"),
   achievementController.deleteAchievement
 );
 

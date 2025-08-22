@@ -20,34 +20,9 @@ enum Gender {
   P
 }
 
-enum JenisPelanggaran {
-  kedisiplinan
-  akademik
-  lainnya
-}
-
-enum KategoriPelanggaran {
-  ringan
-  sedang
-  berat
-}
-
-enum KategoriPrestasi {
-  akademik
-  non_akademik
-  olahraga
-  kesenian
-  lainnya
-}
-
-enum StatusAngkatan {
-  aktif
-  lulus
-}
-
 enum TipeReport {
-  violation
-  achievement
+  pelanggaran
+  prestasi
 }
 
 model User {
@@ -88,6 +63,7 @@ model Student {
 
   reports       StudentReport[]
   notifications Notification[]
+  scoreHistory  ScoreHistory[]
 }
 
 model Teacher {
@@ -116,7 +92,6 @@ model Classroom {
   id          Int      @id @default(autoincrement())
   kodeKelas   String   @unique
   namaKelas   String
-  jmlSiswa    Int      @default(0)
   waliKelas   Teacher? @relation("WaliKelas", fields: [waliKelasId], references: [id])
   waliKelasId Int?     @unique // Setiap guru hanya bisa menjadi wali kelas untuk satu kelas
 
@@ -124,63 +99,66 @@ model Classroom {
 }
 
 model Angkatan {
-  id     Int            @id @default(autoincrement())
-  tahun  String         @unique
-  status StatusAngkatan @default(aktif)
+  id    Int    @id @default(autoincrement())
+  tahun String @unique
 
   students Student[]
 }
 
-model Violation {
-  id        Int                 @id @default(autoincrement())
+model kategori {
+  id        Int          @id @default(autoincrement())
   nama      String
-  kategori  KategoriPelanggaran
-  jenis     JenisPelanggaran
-  point     Int
-  isActive  Boolean             @default(true)
-  createdAt DateTime            @default(now())
-
-  reports StudentReport[] @relation("ViolationReports")
+  tipe      TipeReport
+  items     ReportItem[]
+  createdAt DateTime     @default(now())
 }
 
-model Achievement {
-  id        Int              @id @default(autoincrement())
-  nama      String
-  kategori  KategoriPrestasi
-  point     Int
-  isActive  Boolean          @default(true)
-  createdAt DateTime         @default(now())
+model ReportItem {
+  id         Int        @id @default(autoincrement())
+  nama       String
+  tipe       TipeReport
+  kategori   kategori   @relation(fields: [kategoriId], references: [id])
+  kategoriId Int
+  jenis      String? // subkategori opsional, misalnya "Ringan", "Sedang", "Berat"
+  point      Int
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now())
 
-  reports StudentReport[] @relation("AchievementReports")
+  reports StudentReport[]
 }
 
 model StudentReport {
-  id         Int        @id @default(autoincrement())
-  student    Student    @relation(fields: [studentId], references: [id])
+  id         Int     @id @default(autoincrement())
+  student    Student @relation(fields: [studentId], references: [id])
   studentId  Int
-  reporter   User       @relation("ReportReporter", fields: [reporterId], references: [id])
+  reporter   User    @relation("ReportReporter", fields: [reporterId], references: [id])
   reporterId Int
-  tipe       TipeReport
 
-  // Relasi conditional berdasarkan tipe
-  violation     Violation?   @relation("ViolationReports", fields: [violationId], references: [id])
-  violationId   Int?
-  achievement   Achievement? @relation("AchievementReports", fields: [achievementId], references: [id])
-  achievementId Int?
+  item   ReportItem @relation(fields: [itemId], references: [id])
+  itemId Int
 
-  // Relasi dengan TahunAjaran
   tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
   tahunAjaranId Int
 
   tanggal   DateTime  @default(now())
-  waktu     DateTime? // waktu kejadian jika berbeda
+  waktu     DateTime? // waktu kejadian lebih detail
   deskripsi String?
-  bukti     String?
-  pointSaat Int // point saat pelanggaran/prestasi terjadi
+  pointSaat Int
   createdAt DateTime  @default(now())
+
+  bukti ReportEvidence[]
 
   // Relasi ke penanganan (hanya untuk violation)
   penanganan Penanganan?
+}
+
+model ReportEvidence {
+  id        Int           @id @default(autoincrement())
+  report    StudentReport @relation(fields: [reportId], references: [id])
+  reportId  Int
+  url       String // link atau path file bukti
+  tipe      String? // contoh: "image", "pdf", "video"
+  createdAt DateTime      @default(now())
 }
 
 model TindakanOtomatis {
@@ -253,6 +231,7 @@ model TahunAjaran {
 // Tabel untuk menyimpan histori perubahan score siswa
 model ScoreHistory {
   id        Int      @id @default(autoincrement())
+  student   Student  @relation(fields: [studentId], references: [id])
   studentId Int
   pointLama Int
   pointBaru Int

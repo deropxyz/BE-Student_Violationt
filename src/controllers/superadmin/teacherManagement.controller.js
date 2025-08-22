@@ -183,7 +183,7 @@ const getAllTeachersAndBK = async (req, res) => {
               noHp: true,
               classrooms: {
                 select: {
-                  namaKelas: true,
+                  kodeKelas: true,
                 },
               },
             },
@@ -205,7 +205,7 @@ const getAllTeachersAndBK = async (req, res) => {
       email: user.email,
       noHp: user.teacher?.noHp || null,
       role: user.role, // Role sebagai pembeda antara guru dan BK
-      waliKelas: user.teacher?.classrooms?.[0]?.namaKelas || null, // Informasi wali kelas
+      waliKelas: user.teacher?.classrooms?.[0]?.kodeKelas || null, // Informasi wali kelas
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     }));
@@ -564,6 +564,48 @@ const deleteTeacher = async (req, res) => {
   }
 };
 
+// Reset teacher password to default
+const resetTeacherPassword = async (req, res) => {
+  const { teacherId } = req.params;
+  const defaultPassword = process.env.DEFAULT_PASSWORD;
+
+  if (!defaultPassword) {
+    return res.status(500).json({
+      error: "DEFAULT_PASSWORD belum diatur di .env",
+    });
+  }
+
+  try {
+    // Find teacher/BK user
+    const teacher = await prisma.user.findUnique({
+      where: { id: parseInt(teacherId) },
+      include: { teacher: true },
+    });
+
+    if (!teacher || (teacher.role !== "guru" && teacher.role !== "bk")) {
+      return res.status(404).json({ error: "Guru/BK tidak ditemukan" });
+    }
+
+    // Hash default password
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+
+    // Update user password
+    await prisma.user.update({
+      where: { id: parseInt(teacherId) },
+      data: { password: hashedPassword },
+    });
+
+    const roleLabel = teacher.role === "guru" ? "guru" : "BK";
+    res.json({
+      success: true,
+      message: `Password ${roleLabel} berhasil direset ke default`,
+    });
+  } catch (err) {
+    console.error("Error resetting teacher password:", err);
+    res.status(500).json({ error: "Gagal reset password guru/BK" });
+  }
+};
+
 module.exports = {
   getAllTeachers,
   getAllBK,
@@ -572,4 +614,5 @@ module.exports = {
   createTeacher,
   updateTeacher,
   deleteTeacher,
+  resetTeacherPassword,
 };

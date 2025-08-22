@@ -16,36 +16,36 @@ const {
 router.get(
   "/",
   authenticate,
-  requireRole(["bk", "superadmin", "guru"]),
+  requireRole("bk", "superadmin", "guru"),
   getAllViolations
 );
 router.get(
   "/:id",
   authenticate,
-  requireRole(["bk", "superadmin", "guru"]),
+  requireRole("bk", "superadmin", "guru"),
   getViolationDetail
 );
 router.post(
   "/",
   authenticate,
-  requireRole(["bk", "superadmin"]),
+  requireRole("bk", "superadmin"),
   createViolation
 );
 router.put(
   "/:id",
   authenticate,
-  requireRole(["bk", "superadmin"]),
+  requireRole("bk", "superadmin"),
   updateViolation
 );
 router.delete(
   "/:id",
   authenticate,
-  requireRole(["bk", "superadmin"]),
+  requireRole("bk", "superadmin"),
   deleteViolation
 );
 
 // hanya guru dan bk yang bisa input laporan
-router.post("/lapor", authenticate, requireRole(["guru", "bk"]), (req, res) => {
+router.post("/lapor", authenticate, requireRole("guru", "bk"), (req, res) => {
   res.json({
     message: `Laporan diterima oleh ${req.user.role}`,
     userId: req.user.id,

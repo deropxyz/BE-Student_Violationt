@@ -22,7 +22,7 @@ const authenticate = (req, res, next) => {
 };
 
 // Optional: middleware pembatasan role
-const requireRole = (roles) => {
+const requireRole = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
       return res

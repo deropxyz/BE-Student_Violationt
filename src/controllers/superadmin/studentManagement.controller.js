@@ -717,6 +717,52 @@ const deleteStudent = async (req, res) => {
   }
 };
 
+// Reset student password to default
+const resetStudentPassword = async (req, res) => {
+  const { studentId } = req.params;
+  const defaultPassword = process.env.DEFAULT_PASSWORD;
+
+  if (!defaultPassword) {
+    return res.status(500).json({
+      error: "DEFAULT_PASSWORD belum diatur di .env",
+    });
+  }
+
+  try {
+    // Find user with role siswa (studentId is actually userId)
+    const user = await prisma.user.findUnique({
+      where: {
+        id: parseInt(studentId),
+        role: "siswa",
+      },
+      include: {
+        student: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "Student tidak ditemukan" });
+    }
+
+    // Hash default password
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+
+    // Update user password
+    await prisma.user.update({
+      where: { id: parseInt(studentId) },
+      data: { password: hashedPassword },
+    });
+
+    res.json({
+      success: true,
+      message: "Password siswa berhasil direset ke default",
+    });
+  } catch (err) {
+    console.error("Error resetting student password:", err);
+    res.status(500).json({ error: "Gagal reset password siswa" });
+  }
+};
+
 module.exports = {
   getAllClassrooms,
   getAllStudents,
@@ -725,4 +771,5 @@ module.exports = {
   createStudent,
   updateStudent,
   deleteStudent,
+  resetStudentPassword,
 };

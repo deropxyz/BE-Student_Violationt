@@ -11,21 +11,21 @@ const {
 router.get(
   "/dashboard/:studentId",
   authenticate,
-  requireRole(["siswa", "orangtua", "bk", "superadmin"]),
+  requireRole("siswa", "orangtua", "bk", "superadmin"),
   getStudentDashboard
 );
 
 router.get(
   "/:studentId",
   authenticate,
-  requireRole(["siswa", "orangtua", "bk", "superadmin"]),
+  requireRole("siswa", "orangtua", "bk", "superadmin"),
   getStudentNotifications
 );
 
 router.put(
   "/read/:id",
   authenticate,
-  requireRole(["siswa", "orangtua"]),
+  requireRole("siswa", "orangtua"),
   markNotificationAsRead
 );
 

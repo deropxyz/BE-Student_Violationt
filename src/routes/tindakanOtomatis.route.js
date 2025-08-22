@@ -12,25 +12,25 @@ const {
 router.get(
   "/",
   authenticate,
-  requireRole(["bk", "superadmin"]),
+  requireRole("bk", "superadmin"),
   getAllTindakanOtomatis
 );
 router.post(
   "/",
   authenticate,
-  requireRole(["bk", "superadmin"]),
+  requireRole("bk", "superadmin"),
   createTindakanOtomatis
 );
 router.put(
   "/:id",
   authenticate,
-  requireRole(["bk", "superadmin"]),
+  requireRole("bk", "superadmin"),
   updateTindakanOtomatis
 );
 router.delete(
   "/:id",
   authenticate,
-  requireRole(["bk", "superadmin"]),
+  requireRole("bk", "superadmin"),
   deleteTindakanOtomatis
 );
 

@@ -74,3 +74,37 @@ const login = async (req, res) => {
 };
 
 module.exports = { login };
+
+// Reset password by email (admin or forgot password flow)
+const resetPassword = async (req, res) => {
+  const { email } = req.body;
+  const defaultPassword = process.env.DEFAULT_PASSWORD;
+  if (!email) {
+    return res.status(400).json({ message: "Email wajib diisi" });
+  }
+  if (!defaultPassword) {
+    return res
+      .status(500)
+      .json({ message: "DEFAULT_PASSWORD belum diatur di .env" });
+  }
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
+    }
+    const hashed = await bcrypt.hash(defaultPassword, 10);
+    await prisma.user.update({
+      where: { email },
+      data: { password: hashed },
+    });
+    res.json({ message: "Password berhasil direset ke default" });
+  } catch (err) {
+    console.error("Error resetting password:", err);
+    res.status(500).json({ message: "Gagal reset password" });
+  }
+};
+
+module.exports = {
+  login,
+  resetPassword,
+};

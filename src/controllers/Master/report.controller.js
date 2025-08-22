@@ -169,7 +169,7 @@ const getAllStudents = async (req, res) => {
       id: student.id,
       nisn: student.nisn,
       nama: student.user.name,
-      kelas: student.classroom?.namaKelas,
+      kelas: student.classroom?.kodeKelas,
       classroomId: student.classroomId,
     }));
 
@@ -193,10 +193,10 @@ const getAllStudentReports = async (req, res) => {
       limit = 10,
       studentId,
       classroomId,
-      tipe, // violation atau achievement
+      tipe, // pelanggaran atau prestasi
       startDate,
       endDate,
-      kategori,
+      kategoriId,
       jenis,
       tahunAjaranId, // Filter by academic year
     } = req.query;
@@ -206,21 +206,26 @@ const getAllStudentReports = async (req, res) => {
     // Build where clause
     const where = {};
     if (studentId) where.studentId = parseInt(studentId);
-    if (tipe) where.tipe = tipe;
-    if (classroomId) where.student = { classroomId: parseInt(classroomId) };
     if (tahunAjaranId) where.tahunAjaranId = parseInt(tahunAjaranId);
 
-    // Filter by violation or achievement category
-    if (kategori) {
-      if (tipe === "violation") {
-        where.violation = { kategori };
-      } else if (tipe === "achievement") {
-        where.achievement = { kategori };
-      }
+    // Filter by student's classroom
+    if (classroomId) {
+      where.student = { classroomId: parseInt(classroomId) };
     }
 
-    if (jenis && tipe === "violation") {
-      where.violation = { ...where.violation, jenis };
+    // Filter by report item type
+    if (tipe) {
+      where.item = { tipe };
+    }
+
+    // Filter by category
+    if (kategoriId) {
+      where.item = { ...where.item, kategoriId: parseInt(kategoriId) };
+    }
+
+    // Filter by jenis (subkategori)
+    if (jenis) {
+      where.item = { ...where.item, jenis };
     }
 
     if (startDate || endDate) {
@@ -240,10 +245,14 @@ const getAllStudentReports = async (req, res) => {
               angkatan: { select: { tahun: true } },
             },
           },
-          violation: true,
-          achievement: true,
+          item: {
+            include: {
+              kategori: true,
+            },
+          },
           reporter: { select: { name: true, role: true } },
           penanganan: true,
+          bukti: true,
         },
         orderBy: { tanggal: "desc" },
         skip,
@@ -254,7 +263,6 @@ const getAllStudentReports = async (req, res) => {
 
     const formattedReports = reports.map((r) => ({
       id: r.id,
-      tipe: r.tipe,
       student: {
         id: r.student.id,
         nama: r.student.user.name,
@@ -265,23 +273,14 @@ const getAllStudentReports = async (req, res) => {
         angkatan: r.student.angkatan?.tahun,
         totalScore: r.student.totalScore,
       },
-      violation: r.violation
-        ? {
-            id: r.violation.id,
-            nama: r.violation.nama,
-            kategori: r.violation.kategori,
-            jenis: r.violation.jenis,
-            point: r.violation.point,
-          }
-        : null,
-      achievement: r.achievement
-        ? {
-            id: r.achievement.id,
-            nama: r.achievement.nama,
-            kategori: r.achievement.kategori,
-            point: r.achievement.point,
-          }
-        : null,
+      item: {
+        id: r.item.id,
+        nama: r.item.nama,
+        tipe: r.item.tipe,
+        kategori: r.item.kategori.nama,
+        jenis: r.item.jenis,
+        point: r.item.point,
+      },
       tanggal: r.tanggal,
       waktu: r.waktu,
       deskripsi: r.deskripsi,
@@ -323,10 +322,14 @@ const getStudentReportById = async (req, res) => {
             angkatan: { select: { tahun: true } },
           },
         },
-        violation: true,
-        achievement: true,
+        item: {
+          include: {
+            kategori: true,
+          },
+        },
         reporter: { select: { name: true, role: true } },
         penanganan: true,
+        bukti: true,
       },
     });
 
@@ -336,7 +339,6 @@ const getStudentReportById = async (req, res) => {
 
     const formattedReport = {
       id: report.id,
-      tipe: report.tipe,
       student: {
         id: report.student.id,
         nama: report.student.user.name,
@@ -347,23 +349,14 @@ const getStudentReportById = async (req, res) => {
         angkatan: report.student.angkatan?.tahun,
         totalScore: report.student.totalScore,
       },
-      violation: report.violation
-        ? {
-            id: report.violation.id,
-            nama: report.violation.nama,
-            kategori: report.violation.kategori,
-            jenis: report.violation.jenis,
-            point: report.violation.point,
-          }
-        : null,
-      achievement: report.achievement
-        ? {
-            id: report.achievement.id,
-            nama: report.achievement.nama,
-            kategori: report.achievement.kategori,
-            point: report.achievement.point,
-          }
-        : null,
+      item: {
+        id: report.item.id,
+        nama: report.item.nama,
+        tipe: report.item.tipe,
+        kategori: report.item.kategori.nama,
+        jenis: report.item.jenis,
+        point: report.item.point,
+      },
       tanggal: report.tanggal,
       waktu: report.waktu,
       deskripsi: report.deskripsi,
@@ -390,16 +383,16 @@ const createStudentReport = async (req, res) => {
   const reporterId = req.user.id;
 
   try {
-    // ✅ NEW: Validate active academic year for creating new reports
+    // Validate active academic year for creating new reports
     let activeYear;
     try {
       activeYear = await validateActiveAcademicYear();
     } catch (error) {
       if (error.code === "ACADEMIC_YEAR_REQUIRED") {
         return res.status(400).json({
-          error: "No active academic year found",
+          error: "Belum ada tahun ajaran Aktif",
           message:
-            "Cannot create new reports. Please contact administrator to set active academic year.",
+            "Tidak dapat membuat laporan baru. Silakan hubungi administrator untuk mengatur tahun ajaran aktif.",
         });
       }
       throw error;
@@ -407,32 +400,18 @@ const createStudentReport = async (req, res) => {
 
     const {
       studentId,
-      tipe, // 'violation' or 'achievement'
-      violationId,
-      achievementId,
+      itemId, // ID dari ReportItem
       tanggal,
       waktu,
       deskripsi,
       bukti,
-      pointSaat,
+      point,
     } = req.body;
 
     // Validate input
-    if (!tipe || !["violation", "achievement"].includes(tipe)) {
+    if (!itemId) {
       return res.status(400).json({
-        error: "Tipe laporan harus 'violation' atau 'achievement'",
-      });
-    }
-
-    if (tipe === "violation" && !violationId) {
-      return res.status(400).json({
-        error: "violationId wajib untuk tipe violation",
-      });
-    }
-
-    if (tipe === "achievement" && !achievementId) {
-      return res.status(400).json({
-        error: "achievementId wajib untuk tipe achievement",
+        error: "itemId wajib diisi",
       });
     }
 
@@ -454,31 +433,21 @@ const createStudentReport = async (req, res) => {
       });
     }
 
-    let violation = null;
-    let achievement = null;
-    let finalPointSaat = pointSaat;
+    // Validate ReportItem exists and is active
+    const reportItem = await prisma.reportItem.findUnique({
+      where: { id: parseInt(itemId) },
+      include: { kategori: true },
+    });
 
-    if (tipe === "violation") {
-      violation = await prisma.violation.findUnique({
-        where: { id: parseInt(violationId) },
-      });
-      if (!violation) {
-        return res
-          .status(404)
-          .json({ error: "Jenis pelanggaran tidak ditemukan" });
-      }
-      finalPointSaat = pointSaat || violation.point;
-    } else {
-      achievement = await prisma.achievement.findUnique({
-        where: { id: parseInt(achievementId) },
-      });
-      if (!achievement) {
-        return res
-          .status(404)
-          .json({ error: "Jenis prestasi tidak ditemukan" });
-      }
-      finalPointSaat = pointSaat || achievement.point;
+    if (!reportItem) {
+      return res.status(404).json({ error: "Item laporan tidak ditemukan" });
     }
+
+    if (!reportItem.isActive) {
+      return res.status(400).json({ error: "Item laporan sudah tidak aktif" });
+    }
+
+    reportItem.point;
 
     // Validate and parse waktu
     let parsedWaktu = null;
@@ -501,42 +470,51 @@ const createStudentReport = async (req, res) => {
       data: {
         studentId: parseInt(studentId),
         reporterId,
-        tipe,
-        violationId: tipe === "violation" ? parseInt(violationId) : null,
-        achievementId: tipe === "achievement" ? parseInt(achievementId) : null,
+        itemId: parseInt(itemId),
         tahunAjaranId: activeYear.id, // ✅ NEW: Add academic year relation
         tanggal: new Date(tanggal),
         waktu: parsedWaktu,
         deskripsi,
-        bukti,
-        pointSaat: finalPointSaat,
+        pointSaat: reportItem.point,
       },
       include: {
         student: { include: { user: true, classroom: true } },
-        violation: true,
-        achievement: true,
+        item: { include: { kategori: true } },
         reporter: { select: { name: true, role: true } },
       },
     });
 
+    // Create bukti (evidence) if provided
+    if (bukti && Array.isArray(bukti)) {
+      for (const evidence of bukti) {
+        await prisma.reportEvidence.create({
+          data: {
+            reportId: studentReport.id,
+            url: evidence.url,
+            tipe: evidence.tipe,
+          },
+        });
+      }
+    }
+
     // Update student total score
-    if (tipe === "violation") {
+    if (reportItem.tipe === "pelanggaran") {
       await prisma.student.update({
         where: { id: parseInt(studentId) },
-        data: { totalScore: { decrement: finalPointSaat } },
+        data: { totalScore: { decrement: reportItem.point } },
       });
     } else {
       await prisma.student.update({
         where: { id: parseInt(studentId) },
-        data: { totalScore: { increment: finalPointSaat } },
+        data: { totalScore: { increment: reportItem.point } },
       });
     }
 
     // Create score history
     const newScore =
-      tipe === "violation"
-        ? student.totalScore - finalPointSaat
-        : student.totalScore + finalPointSaat;
+      reportItem.tipe === "pelanggaran"
+        ? student.totalScore - reportItem.point
+        : student.totalScore + reportItem.point;
 
     await prisma.scoreHistory.create({
       data: {
@@ -544,20 +522,20 @@ const createStudentReport = async (req, res) => {
         pointLama: student.totalScore,
         pointBaru: newScore,
         alasan:
-          tipe === "violation"
-            ? `Pelanggaran: ${violation.nama}`
-            : `Prestasi: ${achievement.nama}`,
+          reportItem.tipe === "pelanggaran"
+            ? `Pelanggaran: ${reportItem.nama}`
+            : `Prestasi: ${reportItem.nama}`,
         tanggal: new Date(),
       },
     });
 
     // Create notification for student
     const notificationTitle =
-      tipe === "violation" ? "Pelanggaran Baru" : "Prestasi Baru";
+      reportItem.tipe === "pelanggaran" ? "Pelanggaran Baru" : "Prestasi Baru";
     const notificationMessage =
-      tipe === "violation"
-        ? `Anda telah melakukan pelanggaran: ${violation.nama}. Poin: -${finalPointSaat}`
-        : `Selamat! Anda meraih prestasi: ${achievement.nama}. Poin: +${finalPointSaat}`;
+      reportItem.tipe === "pelanggaran"
+        ? `Anda telah melakukan pelanggaran: ${reportItem.nama}. Poin: -${reportItem.point}`
+        : `Selamat! Anda meraih prestasi: ${reportItem.nama}. Poin: +${reportItem.point}`;
 
     await prisma.notification.create({
       data: {
@@ -571,18 +549,21 @@ const createStudentReport = async (req, res) => {
     res.status(201).json({
       success: true,
       message: `Laporan ${
-        tipe === "violation" ? "pelanggaran" : "prestasi"
+        reportItem.tipe === "pelanggaran" ? "pelanggaran" : "prestasi"
       } berhasil dibuat`,
       data: {
         id: studentReport.id,
-        tipe: studentReport.tipe,
         student: {
           nama: studentReport.student.user.name,
           nisn: studentReport.student.nisn,
           kelas: studentReport.student.classroom?.namaKelas,
         },
-        violation: studentReport.violation,
-        achievement: studentReport.achievement,
+        item: {
+          nama: reportItem.nama,
+          tipe: reportItem.tipe,
+          kategori: reportItem.kategori.nama,
+          point: reportItem.point,
+        },
         tanggal: studentReport.tanggal,
         reporter: studentReport.reporter.name,
       },
@@ -597,25 +578,15 @@ const createStudentReport = async (req, res) => {
 const updateStudentReport = async (req, res) => {
   try {
     const { reportId } = req.params;
-    const {
-      studentId,
-      tipe,
-      violationId,
-      achievementId,
-      tanggal,
-      waktu,
-      deskripsi,
-      bukti,
-      pointSaat,
-    } = req.body;
+    const { studentId, itemId, tanggal, waktu, deskripsi, bukti, pointSaat } =
+      req.body;
 
     // Check if report exists
     const existingReport = await prisma.studentReport.findUnique({
       where: { id: parseInt(reportId) },
       include: {
         student: true,
-        violation: true,
-        achievement: true,
+        item: { include: { kategori: true } },
       },
     });
 
@@ -623,45 +594,28 @@ const updateStudentReport = async (req, res) => {
       return res.status(404).json({ error: "Laporan tidak ditemukan" });
     }
 
-    let newViolation = existingReport.violation;
-    let newAchievement = existingReport.achievement;
+    let newReportItem = existingReport.item;
     let finalPointSaat = pointSaat;
 
-    // If type changed or IDs changed, validate new records
-    if (tipe && tipe !== existingReport.tipe) {
-      return res.status(400).json({
-        error: "Tipe laporan tidak dapat diubah setelah dibuat",
+    // If itemId changed, validate new ReportItem
+    if (itemId && parseInt(itemId) !== existingReport.itemId) {
+      newReportItem = await prisma.reportItem.findUnique({
+        where: { id: parseInt(itemId) },
+        include: { kategori: true },
       });
+      if (!newReportItem) {
+        return res
+          .status(404)
+          .json({ error: "Item laporan baru tidak ditemukan" });
+      }
+      if (!newReportItem.isActive) {
+        return res
+          .status(400)
+          .json({ error: "Item laporan baru sudah tidak aktif" });
+      }
     }
 
-    if (existingReport.tipe === "violation") {
-      if (violationId && parseInt(violationId) !== existingReport.violationId) {
-        newViolation = await prisma.violation.findUnique({
-          where: { id: parseInt(violationId) },
-        });
-        if (!newViolation) {
-          return res
-            .status(404)
-            .json({ error: "Jenis pelanggaran baru tidak ditemukan" });
-        }
-      }
-      finalPointSaat = pointSaat || newViolation.point;
-    } else {
-      if (
-        achievementId &&
-        parseInt(achievementId) !== existingReport.achievementId
-      ) {
-        newAchievement = await prisma.achievement.findUnique({
-          where: { id: parseInt(achievementId) },
-        });
-        if (!newAchievement) {
-          return res
-            .status(404)
-            .json({ error: "Jenis prestasi baru tidak ditemukan" });
-        }
-      }
-      finalPointSaat = pointSaat || newAchievement.point;
-    }
+    finalPointSaat = pointSaat || newReportItem.point;
 
     const oldPoints = existingReport.pointSaat;
     const pointDifference = finalPointSaat - oldPoints;
@@ -693,26 +647,44 @@ const updateStudentReport = async (req, res) => {
       where: { id: parseInt(reportId) },
       data: {
         studentId: studentId ? parseInt(studentId) : undefined,
-        violationId: violationId ? parseInt(violationId) : undefined,
-        achievementId: achievementId ? parseInt(achievementId) : undefined,
+        itemId: itemId ? parseInt(itemId) : undefined,
         tanggal: tanggal ? new Date(tanggal) : undefined,
         waktu: parsedWaktu,
         deskripsi,
-        bukti,
         pointSaat: finalPointSaat,
       },
       include: {
         student: { include: { user: true, classroom: true } },
-        violation: true,
-        achievement: true,
+        item: { include: { kategori: true } },
         reporter: { select: { name: true, role: true } },
       },
     });
 
+    // Update bukti (evidence) if provided
+    if (bukti !== undefined) {
+      // Delete existing evidence
+      await prisma.reportEvidence.deleteMany({
+        where: { reportId: parseInt(reportId) },
+      });
+
+      // Create new evidence
+      if (bukti && Array.isArray(bukti)) {
+        for (const evidence of bukti) {
+          await prisma.reportEvidence.create({
+            data: {
+              reportId: parseInt(reportId),
+              url: evidence.url,
+              tipe: evidence.tipe,
+            },
+          });
+        }
+      }
+    }
+
     // Update student total score if points changed
     if (pointDifference !== 0) {
       const scoreIncrement =
-        existingReport.tipe === "violation"
+        newReportItem.tipe === "pelanggaran"
           ? -pointDifference // For violations, more points = more deduction
           : pointDifference; // For achievements, more points = more addition
 
@@ -729,10 +701,8 @@ const updateStudentReport = async (req, res) => {
           pointLama: existingReport.student.totalScore,
           pointBaru: newScore,
           alasan: `Update ${
-            existingReport.tipe === "violation" ? "pelanggaran" : "prestasi"
-          }: ${
-            updatedReport.violation?.nama || updatedReport.achievement?.nama
-          }`,
+            newReportItem.tipe === "pelanggaran" ? "pelanggaran" : "prestasi"
+          }: ${newReportItem.nama}`,
           tanggal: new Date(),
         },
       });
@@ -758,8 +728,7 @@ const deleteStudentReport = async (req, res) => {
       where: { id: parseInt(reportId) },
       include: {
         student: true,
-        violation: true,
-        achievement: true,
+        item: { include: { kategori: true } },
       },
     });
 
@@ -768,7 +737,7 @@ const deleteStudentReport = async (req, res) => {
     }
 
     // Restore student points before deleting
-    if (existingReport.tipe === "violation") {
+    if (existingReport.item.tipe === "pelanggaran") {
       await prisma.student.update({
         where: { id: existingReport.studentId },
         data: { totalScore: { increment: existingReport.pointSaat } },
@@ -782,7 +751,7 @@ const deleteStudentReport = async (req, res) => {
 
     // Create score history
     const newScore =
-      existingReport.tipe === "violation"
+      existingReport.item.tipe === "pelanggaran"
         ? existingReport.student.totalScore + existingReport.pointSaat
         : existingReport.student.totalScore - existingReport.pointSaat;
 
@@ -792,12 +761,17 @@ const deleteStudentReport = async (req, res) => {
         pointLama: existingReport.student.totalScore,
         pointBaru: newScore,
         alasan: `Hapus ${
-          existingReport.tipe === "violation" ? "pelanggaran" : "prestasi"
-        }: ${
-          existingReport.violation?.nama || existingReport.achievement?.nama
-        }`,
+          existingReport.item.tipe === "pelanggaran"
+            ? "pelanggaran"
+            : "prestasi"
+        }: ${existingReport.item.nama}`,
         tanggal: new Date(),
       },
+    });
+
+    // Delete evidence first (due to foreign key constraint)
+    await prisma.reportEvidence.deleteMany({
+      where: { reportId: parseInt(reportId) },
     });
 
     // Delete the report record
@@ -820,10 +794,8 @@ const recalculateAllTotalScores = async (req, res) => {
   try {
     // Get all students
     const students = await prisma.student.findMany({
-      select: {
-        id: true,
-        nama: true,
-        totalScore: true,
+      include: {
+        user: { select: { name: true } },
       },
     });
 
@@ -834,38 +806,26 @@ const recalculateAllTotalScores = async (req, res) => {
 
     for (const student of students) {
       // Calculate actual total score from reports
-      const violationReports = await prisma.studentReport.findMany({
+      const reports = await prisma.studentReport.findMany({
         where: {
           studentId: student.id,
-          tipe: "violation",
         },
-        select: {
-          pointSaat: true,
-        },
-      });
-
-      const achievementReports = await prisma.studentReport.findMany({
-        where: {
-          studentId: student.id,
-          tipe: "achievement",
-        },
-        select: {
-          pointSaat: true,
+        include: {
+          item: true,
         },
       });
 
       // Calculate correct total score
-      const totalViolationPoints = violationReports.reduce(
-        (sum, report) => sum + (report.pointSaat || 0),
-        0
-      );
-      const totalAchievementPoints = achievementReports.reduce(
-        (sum, report) => sum + (report.pointSaat || 0),
-        0
-      );
+      let correctTotalScore = 0;
 
-      // Violations should subtract from score, achievements should add
-      const correctTotalScore = totalAchievementPoints - totalViolationPoints;
+      reports.forEach((report) => {
+        if (report.item.tipe === "pelanggaran") {
+          correctTotalScore -= report.pointSaat;
+        } else {
+          correctTotalScore += report.pointSaat;
+        }
+      });
+
       const currentTotalScore = student.totalScore;
 
       if (correctTotalScore !== currentTotalScore) {
@@ -889,16 +849,15 @@ const recalculateAllTotalScores = async (req, res) => {
         updatedCount++;
         results.push({
           studentId: student.id,
-          studentName: student.nama,
+          studentName: student.user.name,
           oldScore: currentTotalScore,
           newScore: correctTotalScore,
           difference: correctTotalScore - currentTotalScore,
-          violationPoints: totalViolationPoints,
-          achievementPoints: totalAchievementPoints,
+          totalReports: reports.length,
         });
 
         console.log(
-          `Updated ${student.nama}: ${currentTotalScore} → ${correctTotalScore}`
+          `Updated ${student.user.name}: ${currentTotalScore} → ${correctTotalScore}`
         );
       }
     }

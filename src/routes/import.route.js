@@ -10,7 +10,7 @@ const upload = multer({ dest: "uploads/" });
 router.post(
   "/:type",
   authenticate,
-  requireRole(["superadmin"]),
+  requireRole("superadmin"),
   upload.single("file"),
   importFromExcel
 );
