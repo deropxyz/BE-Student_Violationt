@@ -6,7 +6,8 @@ const {
   getStudentDetailBK,
   searchStudents,
 } = require("../controllers/bk/monitoring.controller");
-const { authenticate } = require("../middlewares/auth.middleware");
+
+const { authenticate, requireRole } = require("../middlewares/auth.middleware");
 
 // BK Dashboard and Monitoring Routes
 router.get("/classrooms", authenticate, getClassroomWithReports);

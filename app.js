@@ -20,6 +20,8 @@ const academicYearRoute = require("./src/routes/academicYear.route");
 const studentRoute = require("./src/routes/student.route");
 const kategoriRoute = require("./src/routes/master/kategori.route");
 const walikelasRoute = require("./src/routes/walikelas.route");
+const rekapRoute = require("./src/routes/master/rekap.route");
+const automasiRoute = require("./src/routes/automasi.route");
 
 dotenv.config();
 
@@ -52,6 +54,7 @@ app.use("/api/superadmin", superadminRoute);
 app.use("/api/master/violations", violationRoute);
 app.use("/api/master/achievements", achievementRoute);
 app.use("/api/master/reports", reportRoute);
+app.use("/api/master/rekap", rekapRoute);
 app.use("/api/tindakan-otomatis", tindakanOtomatisRoute);
 app.use("/api/kenaikan-kelas", kenaikanKelasRoute);
 app.use("/api/import", importRoute);
@@ -63,6 +66,7 @@ app.use("/api/academic-years", academicYearRoute);
 app.use("/api/student", studentRoute);
 app.use("/api/master/kategori", kategoriRoute);
 app.use("/api/walikelas", walikelasRoute);
+app.use("/api/automasi", automasiRoute);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

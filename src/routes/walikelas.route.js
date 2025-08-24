@@ -6,6 +6,7 @@ const {
   getStudentsInMyClass,
   getStudentDetailInMyClass,
   getReportsInMyClass,
+  checkIsWaliKelas,
 } = require("../controllers/guru/walikelas.controller");
 
 router.get("/students", authenticate, isWalikelas, getStudentsInMyClass);
@@ -16,5 +17,6 @@ router.get(
   getStudentDetailInMyClass
 );
 router.get("/reports", authenticate, isWalikelas, getReportsInMyClass);
+router.get("/check", authenticate, isWalikelas, checkIsWaliKelas);
 
 module.exports = router;

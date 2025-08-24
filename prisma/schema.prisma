@@ -61,9 +61,10 @@ model Student {
   orangTua    OrangTua?  @relation(fields: [orangTuaId], references: [id])
   orangTuaId  Int?
 
-  reports       StudentReport[]
-  notifications Notification[]
-  scoreHistory  ScoreHistory[]
+  reports         StudentReport[]
+  notifications   Notification[]
+  scoreHistory    ScoreHistory[]
+  suratPeringatan SuratPeringatan[]
 }
 
 model Teacher {
@@ -198,6 +199,50 @@ model Notification {
   pesan     String
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+// Model untuk sistem surat peringatan otomatis
+model SuratPeringatan {
+  id        Int     @id @default(autoincrement())
+  student   Student @relation(fields: [studentId], references: [id])
+  studentId Int
+
+  jenisSurat     String // "SP1", "PANGGIL_ORTU", "TERANCAM_KELUAR"
+  tingkatSurat   Int // 1, 2, 3
+  totalScoreSaat Int // Score siswa saat surat dibuat
+
+  judul        String
+  isiSurat     String
+  statusKirim  String    @default("pending") // "pending", "sent", "failed"
+  tanggalKirim DateTime?
+
+  // Info penerima
+  emailSiswa  String?
+  emailOrtu   String?
+  nomorHpOrtu String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId, jenisSurat])
+  @@index([statusKirim])
+}
+
+// Model untuk konfigurasi threshold otomatisasi
+model AutomasiConfig {
+  id         Int    @id @default(autoincrement())
+  nama       String @unique
+  threshold  Int // -100, -200, -300
+  jenisSurat String // "SP1", "PANGGIL_ORTU", "TERANCAM_KELUAR"
+  tingkat    Int // 1, 2, 3
+
+  // Template surat
+  judulTemplate String
+  isiTemplate   String
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model KenaikanKelas {

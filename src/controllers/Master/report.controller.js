@@ -4,6 +4,7 @@ const {
   getTargetAcademicYear,
   canCreateReports,
 } = require("../../utils/academicYearUtils");
+const { checkAndTriggerSuratPeringatan } = require("../bk/automasi.controller");
 const prisma = new PrismaClient();
 
 // Adjust student points (BK can reduce violation points as a form of rehabilitation)
@@ -45,16 +46,14 @@ const adjustStudentPoints = async (req, res) => {
       },
     });
 
-    // Create score history for tracking
-    await prisma.scoreHistory.create({
-      data: {
-        studentId: parseInt(studentId),
-        pointLama: oldTotalScore,
-        pointBaru: newTotalScore,
-        alasan: `${kategori || "Penyesuaian"} BK: ${alasan}`,
-        tanggal: new Date(),
-      },
-    });
+    // Trigger automasi surat peringatan jika score turun (pelanggaran)
+    if (pointChange < 0) {
+      await checkAndTriggerSuratPeringatan(
+        studentId,
+        newTotalScore,
+        oldTotalScore
+      );
+    }
 
     // Create notification for student
     const notificationMessage =
@@ -206,7 +205,43 @@ const getAllStudentReports = async (req, res) => {
     // Build where clause
     const where = {};
     if (studentId) where.studentId = parseInt(studentId);
-    if (tahunAjaranId) where.tahunAjaranId = parseInt(tahunAjaranId);
+
+    // Filter search by nama siswa atau nisn
+    if (req.query.search) {
+      const search = req.query.search;
+      where.OR = [
+        { student: { nisn: { contains: search, mode: "insensitive" } } },
+        {
+          student: {
+            user: { name: { contains: search, mode: "insensitive" } },
+          },
+        },
+      ];
+    }
+
+    // Tahun ajaran: jika 'all' atau tidak dikirim, ambil semua; jika tidak, filter aktif jika tidak ada param
+    if (tahunAjaranId && tahunAjaranId !== "all") {
+      where.tahunAjaranId = parseInt(tahunAjaranId);
+    } else if (!tahunAjaranId) {
+      // Default: tahun ajaran aktif
+      const activeYear = await prisma.tahunAjaran.findFirst({
+        where: { isActive: true },
+      });
+      if (!activeYear) {
+        return res.status(400).json({
+          error: "Tidak ada tahun ajaran aktif, data tidak dapat ditampilkan.",
+          code: "NO_ACTIVE_YEAR",
+          data: [],
+          pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            total: 0,
+            totalPages: 0,
+          },
+        });
+      }
+      where.tahunAjaranId = activeYear.id;
+    }
 
     // Filter by student's classroom
     if (classroomId) {
@@ -251,7 +286,6 @@ const getAllStudentReports = async (req, res) => {
             },
           },
           reporter: { select: { name: true, role: true } },
-          penanganan: true,
           bukti: true,
         },
         orderBy: { tanggal: "desc" },
@@ -288,7 +322,6 @@ const getAllStudentReports = async (req, res) => {
       pointSaat: r.pointSaat,
       reporter: r.reporter.name,
       reporterRole: r.reporter.role,
-      penanganan: r.penanganan,
       createdAt: r.createdAt,
     }));
 
@@ -328,7 +361,6 @@ const getStudentReportById = async (req, res) => {
           },
         },
         reporter: { select: { name: true, role: true } },
-        penanganan: true,
         bukti: true,
       },
     });
@@ -364,7 +396,6 @@ const getStudentReportById = async (req, res) => {
       pointSaat: report.pointSaat,
       reporter: report.reporter.name,
       reporterRole: report.reporter.role,
-      penanganan: report.penanganan,
       createdAt: report.createdAt,
     };
 
@@ -499,36 +530,34 @@ const createStudentReport = async (req, res) => {
     }
 
     // Update student total score
+    const oldTotalScore = student.totalScore;
+    let newTotalScore;
+
     if (reportItem.tipe === "pelanggaran") {
       await prisma.student.update({
         where: { id: parseInt(studentId) },
         data: { totalScore: { decrement: reportItem.point } },
       });
+      newTotalScore = oldTotalScore - reportItem.point;
     } else {
       await prisma.student.update({
         where: { id: parseInt(studentId) },
         data: { totalScore: { increment: reportItem.point } },
       });
+      newTotalScore = oldTotalScore + reportItem.point;
+    }
+
+    // Trigger automasi surat peringatan jika ini adalah pelanggaran
+    if (reportItem.tipe === "pelanggaran") {
+      await checkAndTriggerSuratPeringatan(
+        studentId,
+        newTotalScore,
+        oldTotalScore
+      );
     }
 
     // Create score history
-    const newScore =
-      reportItem.tipe === "pelanggaran"
-        ? student.totalScore - reportItem.point
-        : student.totalScore + reportItem.point;
-
-    await prisma.scoreHistory.create({
-      data: {
-        studentId: parseInt(studentId),
-        pointLama: student.totalScore,
-        pointBaru: newScore,
-        alasan:
-          reportItem.tipe === "pelanggaran"
-            ? `Pelanggaran: ${reportItem.nama}`
-            : `Prestasi: ${reportItem.nama}`,
-        tanggal: new Date(),
-      },
-    });
+    const newScore = newTotalScore;
 
     // Create notification for student
     const notificationTitle =
@@ -693,20 +722,6 @@ const updateStudentReport = async (req, res) => {
         where: { id: existingReport.studentId },
         data: { totalScore: { increment: scoreIncrement } },
       });
-
-      // Create score history
-      const newScore = existingReport.student.totalScore + scoreIncrement;
-      await prisma.scoreHistory.create({
-        data: {
-          studentId: existingReport.studentId,
-          pointLama: existingReport.student.totalScore,
-          pointBaru: newScore,
-          alasan: `Update ${
-            newReportItem.tipe === "pelanggaran" ? "pelanggaran" : "prestasi"
-          }: ${newReportItem.nama}`,
-          tanggal: new Date(),
-        },
-      });
     }
 
     res.json({
@@ -749,26 +764,6 @@ const deleteStudentReport = async (req, res) => {
         data: { totalScore: { decrement: existingReport.pointSaat } },
       });
     }
-
-    // Create score history
-    const newScore =
-      existingReport.item.tipe === "pelanggaran"
-        ? existingReport.student.totalScore + existingReport.pointSaat
-        : existingReport.student.totalScore - existingReport.pointSaat;
-
-    await prisma.scoreHistory.create({
-      data: {
-        studentId: existingReport.studentId,
-        pointLama: existingReport.student.totalScore,
-        pointBaru: newScore,
-        alasan: `Hapus ${
-          existingReport.item.tipe === "pelanggaran"
-            ? "pelanggaran"
-            : "prestasi"
-        }: ${existingReport.item.nama}`,
-        tanggal: new Date(),
-      },
-    });
 
     // Delete evidence first (due to foreign key constraint)
     await prisma.reportEvidence.deleteMany({
@@ -834,17 +829,6 @@ const recalculateAllTotalScores = async (req, res) => {
         await prisma.student.update({
           where: { id: student.id },
           data: { totalScore: correctTotalScore },
-        });
-
-        // Create score history entry for this correction
-        await prisma.scoreHistory.create({
-          data: {
-            studentId: student.id,
-            pointLama: currentTotalScore,
-            pointBaru: correctTotalScore,
-            alasan: "System recalculation - correcting total score",
-            tanggal: new Date(),
-          },
         });
 
         updatedCount++;

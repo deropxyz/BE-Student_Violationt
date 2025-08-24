@@ -65,23 +65,20 @@ const getMyDashboard = async (req, res) => {
         reports: {
           select: {
             id: true,
-            tipe: true,
             pointSaat: true,
             deskripsi: true,
             tanggal: true,
             createdAt: true,
-            violation: {
+            item: {
               select: {
                 nama: true,
-                kategori: true,
+                tipe: true,
+                kategori: {
+                  select: {
+                    nama: true,
+                  },
+                },
                 jenis: true,
-                point: true,
-              },
-            },
-            achievement: {
-              select: {
-                nama: true,
-                kategori: true,
                 point: true,
               },
             },
@@ -103,9 +100,11 @@ const getMyDashboard = async (req, res) => {
 
     // Kalkulasi statistik dari data yang sudah diambil
     const reports = studentData.reports || [];
-    const violations = reports.filter((report) => report.tipe === "violation");
+    const violations = reports.filter(
+      (report) => report.item.tipe === "pelanggaran"
+    );
     const achievements = reports.filter(
-      (report) => report.tipe === "achievement"
+      (report) => report.item.tipe === "prestasi"
     );
 
     const now = new Date();
@@ -120,11 +119,11 @@ const getMyDashboard = async (req, res) => {
       totalViolations: violations.length,
       totalAchievements: achievements.length,
       totalViolationPoints: violations.reduce(
-        (sum, v) => sum + (v.pointSaat || v.violation?.point || 0),
+        (sum, v) => sum + (v.pointSaat || v.item?.point || 0),
         0
       ),
       totalAchievementPoints: achievements.reduce(
-        (sum, a) => sum + (a.pointSaat || a.achievement?.point || 0),
+        (sum, a) => sum + (a.pointSaat || a.item?.point || 0),
         0
       ),
       violationsThisMonth: violations.filter(
@@ -154,14 +153,14 @@ const getMyDashboard = async (req, res) => {
       ...violations.map((v) => ({
         ...v,
         type: "violation",
-        itemName: v.violation?.nama,
-        points: -(v.pointSaat || v.violation?.point || 0),
+        itemName: v.item?.nama,
+        points: -(v.pointSaat || v.item?.point || 0),
       })),
       ...achievements.map((a) => ({
         ...a,
         type: "achievement",
-        itemName: a.achievement?.nama,
-        points: a.pointSaat || a.achievement?.point || 0,
+        itemName: a.item?.nama,
+        points: a.pointSaat || a.item?.point || 0,
       })),
     ]
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -236,10 +235,16 @@ const getMyViolations = async (req, res) => {
       prisma.studentReport.findMany({
         where: {
           studentId: student.id,
-          tipe: "violation",
+          item: {
+            tipe: "pelanggaran",
+          },
         },
         include: {
-          violation: true,
+          item: {
+            include: {
+              kategori: true,
+            },
+          },
           reporter: {
             select: {
               name: true,
@@ -256,7 +261,9 @@ const getMyViolations = async (req, res) => {
       prisma.studentReport.count({
         where: {
           studentId: student.id,
-          tipe: "violation",
+          item: {
+            tipe: "pelanggaran",
+          },
         },
       }),
     ]);
@@ -297,10 +304,16 @@ const getMyAchievements = async (req, res) => {
       prisma.studentReport.findMany({
         where: {
           studentId: student.id,
-          tipe: "achievement",
+          item: {
+            tipe: "prestasi",
+          },
         },
         include: {
-          achievement: true,
+          item: {
+            include: {
+              kategori: true,
+            },
+          },
           reporter: {
             select: {
               name: true,
@@ -317,7 +330,9 @@ const getMyAchievements = async (req, res) => {
       prisma.studentReport.count({
         where: {
           studentId: student.id,
-          tipe: "achievement",
+          item: {
+            tipe: "prestasi",
+          },
         },
       }),
     ]);

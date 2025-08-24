@@ -97,8 +97,30 @@ const getReportsInMyClass = async (req, res) => {
   }
 };
 
+// Cek apakah user adalah wali kelas
+const checkIsWaliKelas = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    // Cari teacher berdasarkan userId
+    const teacher = await prisma.teacher.findUnique({ where: { userId } });
+    if (!teacher) return res.json({ isWaliKelas: false });
+    // Cek classroom yang waliKelasId = teacher.id
+    const classroom = await prisma.classroom.findFirst({
+      where: { waliKelasId: teacher.id },
+    });
+    if (!classroom) return res.json({ isWaliKelas: false });
+    res.json({ isWaliKelas: true });
+  } catch (err) {
+    console.error("Error checkIsWaliKelas:", err);
+    res
+      .status(500)
+      .json({ isWaliKelas: false, error: "Internal server error" });
+  }
+};
+
 module.exports = {
   getStudentsInMyClass,
   getStudentDetailInMyClass,
   getReportsInMyClass,
+  checkIsWaliKelas,
 };

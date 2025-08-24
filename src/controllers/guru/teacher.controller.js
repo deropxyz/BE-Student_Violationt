@@ -11,9 +11,7 @@ const reportStudent = async (req, res) => {
   const userId = req.user.id;
   const {
     studentId,
-    tipe, // "violation" atau "achievement"
-    violationId,
-    achievementId,
+    itemId, // ID dari ReportItem
     tanggal,
     waktu,
     deskripsi,
@@ -62,44 +60,21 @@ const reportStudent = async (req, res) => {
       });
     }
 
-    // Validate required fields based on type
-    if (tipe === "violation" && !violationId) {
-      return res
-        .status(400)
-        .json({ error: "Violation ID is required for violation reports" });
+    // Validate itemId
+    if (!itemId) {
+      return res.status(400).json({ error: "itemId (ReportItem) is required" });
     }
-
-    if (tipe === "achievement" && !achievementId) {
-      return res
-        .status(400)
-        .json({ error: "Achievement ID is required for achievement reports" });
+    // Get item and point
+    const item = await prisma.reportItem.findUnique({
+      where: { id: parseInt(itemId) },
+    });
+    if (!item) {
+      return res.status(404).json({ error: "Report item not found" });
     }
-
-    // Get point value based on type
-    let pointSaat = 0;
-    if (tipe === "violation") {
-      const violation = await prisma.violation.findUnique({
-        where: { id: parseInt(violationId) },
-      });
-      if (!violation) {
-        return res.status(404).json({ error: "Violation not found" });
-      }
-      pointSaat = -Math.abs(violation.point); // Violations are negative points
-      console.log(
-        `🔴 VIOLATION: ${violation.nama} - Original point: ${violation.point}, Applied point: ${pointSaat}`
-      );
-    } else if (tipe === "achievement") {
-      const achievement = await prisma.achievement.findUnique({
-        where: { id: parseInt(achievementId) },
-      });
-      if (!achievement) {
-        return res.status(404).json({ error: "Achievement not found" });
-      }
-      pointSaat = Math.abs(achievement.point); // Achievements are positive points
-      console.log(
-        `🟢 ACHIEVEMENT: ${achievement.nama} - Original point: ${achievement.point}, Applied point: ${pointSaat}`
-      );
-    }
+    let pointSaat =
+      item.tipe === "pelanggaran"
+        ? -Math.abs(item.point)
+        : Math.abs(item.point);
 
     // Validate and process date fields
     let processedTanggal = new Date();
@@ -152,10 +127,8 @@ const reportStudent = async (req, res) => {
       data: {
         studentId: parseInt(studentId),
         reporterId: userId,
-        tipe,
-        violationId: tipe === "violation" ? parseInt(violationId) : null,
-        achievementId: tipe === "achievement" ? parseInt(achievementId) : null,
-        tahunAjaranId: activeYear.id, // ✅ NEW: Add academic year relation
+        itemId: parseInt(itemId),
+        tahunAjaranId: activeYear.id,
         tanggal: processedTanggal,
         waktu: processedWaktu,
         deskripsi,
@@ -169,8 +142,7 @@ const reportStudent = async (req, res) => {
             classroom: true,
           },
         },
-        violation: true,
-        achievement: true,
+        item: true,
         reporter: {
           select: {
             name: true,
@@ -201,7 +173,7 @@ const reportStudent = async (req, res) => {
         studentId: parseInt(studentId),
         pointLama: student.totalScore,
         pointBaru: student.totalScore + pointSaat,
-        alasan: tipe === "violation" ? "Pelanggaran" : "Prestasi",
+        alasan: item.tipe === "pelanggaran" ? "Pelanggaran" : "Prestasi",
       },
     });
 
@@ -247,7 +219,9 @@ const getMyReports = async (req, res) => {
     };
 
     if (tipe) {
-      whereClause.tipe = tipe;
+      whereClause.item = {
+        tipe: tipe === "violation" ? "pelanggaran" : "prestasi",
+      };
     }
 
     if (studentId) {
@@ -283,16 +257,10 @@ const getMyReports = async (req, res) => {
               },
             },
           },
-          violation: {
+          item: {
             select: {
               nama: true,
-              kategori: true,
-              point: true,
-            },
-          },
-          achievement: {
-            select: {
-              nama: true,
+              tipe: true,
               kategori: true,
               point: true,
             },
@@ -308,27 +276,19 @@ const getMyReports = async (req, res) => {
     // Format the response
     const formattedReports = reports.map((report) => ({
       id: report.id,
-      tipe: report.tipe,
+      tipe: report.item.tipe,
       student: {
         id: report.student.id,
         nisn: report.student.nisn,
         name: report.student.user.name,
         className: report.student.classroom.namaKelas,
       },
-      item:
-        report.tipe === "violation"
-          ? {
-              id: report.violation?.id,
-              nama: report.violation?.nama,
-              kategori: report.violation?.kategori,
-              point: report.violation?.point,
-            }
-          : {
-              id: report.achievement?.id,
-              nama: report.achievement?.nama,
-              kategori: report.achievement?.kategori,
-              point: report.achievement?.point,
-            },
+      item: {
+        id: report.item?.id,
+        nama: report.item?.nama,
+        kategori: report.item?.kategori,
+        point: report.item?.point,
+      },
       tanggal: report.tanggal,
       waktu: report.waktu,
       deskripsi: report.deskripsi,
@@ -348,10 +308,10 @@ const getMyReports = async (req, res) => {
       summary: {
         totalReports: total,
         violationReports: await prisma.studentReport.count({
-          where: { ...whereClause, tipe: "violation" },
+          where: { ...whereClause, item: { tipe: "pelanggaran" } },
         }),
         achievementReports: await prisma.studentReport.count({
-          where: { ...whereClause, tipe: "achievement" },
+          where: { ...whereClause, item: { tipe: "prestasi" } },
         }),
       },
     });
@@ -407,10 +367,10 @@ const getProfile = async (req, res) => {
           where: { reporterId: userId },
         }),
         prisma.studentReport.count({
-          where: { reporterId: userId, tipe: "violation" },
+          where: { reporterId: userId, item: { tipe: "pelanggaran" } },
         }),
         prisma.studentReport.count({
-          where: { reporterId: userId, tipe: "achievement" },
+          where: { reporterId: userId, item: { tipe: "prestasi" } },
         }),
         prisma.studentReport.findMany({
           where: { reporterId: userId },
@@ -424,14 +384,10 @@ const getProfile = async (req, res) => {
                 },
               },
             },
-            violation: {
+            item: {
               select: {
                 nama: true,
-              },
-            },
-            achievement: {
-              select: {
-                nama: true,
+                tipe: true,
               },
             },
           },
@@ -472,9 +428,9 @@ const getProfile = async (req, res) => {
       },
       recentActivity: recentReports.map((report) => ({
         id: report.id,
-        tipe: report.tipe,
+        tipe: report.item?.tipe,
         studentName: report.student.user.name,
-        itemName: report.violation?.nama || report.achievement?.nama,
+        itemName: report.item?.nama,
         tanggal: report.tanggal,
         createdAt: report.createdAt,
       })),
@@ -553,17 +509,19 @@ const updateProfile = async (req, res) => {
 // Get Available Violations for Reporting
 const getViolations = async (req, res) => {
   try {
-    const violations = await prisma.violation.findMany({
-      where: { isActive: true },
-      orderBy: [{ kategori: "asc" }, { point: "desc" }],
+    const violations = await prisma.reportItem.findMany({
+      where: { isActive: true, tipe: "pelanggaran" },
+      orderBy: [{ kategori: { nama: "asc" } }, { point: "desc" }],
+      include: { kategori: true },
     });
 
     // Group by category
     const groupedViolations = violations.reduce((acc, violation) => {
-      if (!acc[violation.kategori]) {
-        acc[violation.kategori] = [];
+      const kategoriNama = violation.kategori?.nama || "Tanpa Kategori";
+      if (!acc[kategoriNama]) {
+        acc[kategoriNama] = [];
       }
-      acc[violation.kategori].push(violation);
+      acc[kategoriNama].push(violation);
       return acc;
     }, {});
 
@@ -580,17 +538,19 @@ const getViolations = async (req, res) => {
 // Get Available Achievements for Reporting
 const getAchievements = async (req, res) => {
   try {
-    const achievements = await prisma.achievement.findMany({
-      where: { isActive: true },
-      orderBy: [{ kategori: "asc" }, { point: "desc" }],
+    const achievements = await prisma.reportItem.findMany({
+      where: { isActive: true, tipe: "prestasi" },
+      orderBy: [{ kategori: { nama: "asc" } }, { point: "desc" }],
+      include: { kategori: true },
     });
 
     // Group by category
     const groupedAchievements = achievements.reduce((acc, achievement) => {
-      if (!acc[achievement.kategori]) {
-        acc[achievement.kategori] = [];
+      const kategoriNama = achievement.kategori?.nama || "Tanpa Kategori";
+      if (!acc[kategoriNama]) {
+        acc[kategoriNama] = [];
       }
-      acc[achievement.kategori].push(achievement);
+      acc[kategoriNama].push(achievement);
       return acc;
     }, {});
 
@@ -741,7 +701,9 @@ const getMyReportsByAcademicYear = async (req, res) => {
     };
 
     if (tipe) {
-      whereClause.tipe = tipe;
+      whereClause.item = {
+        tipe: tipe === "violation" ? "pelanggaran" : "prestasi",
+      };
     }
 
     if (studentId) {
@@ -788,18 +750,13 @@ const getMyReportsByAcademicYear = async (req, res) => {
               },
             },
           },
-          violation: {
+          item: {
             select: {
+              id: true,
               nama: true,
               kategori: true,
               point: true,
-            },
-          },
-          achievement: {
-            select: {
-              nama: true,
-              kategori: true,
-              point: true,
+              tipe: true,
             },
           },
         },
@@ -821,7 +778,7 @@ const getMyReportsByAcademicYear = async (req, res) => {
     // Format the response
     const formattedReports = reports.map((report) => ({
       id: report.id,
-      tipe: report.tipe,
+      tipe: report.item?.tipe,
       student: {
         id: report.student.id,
         nisn: report.student.nisn,
@@ -829,20 +786,12 @@ const getMyReportsByAcademicYear = async (req, res) => {
         className: report.student.classroom.namaKelas,
         angkatan: report.student.angkatan.tahun,
       },
-      item:
-        report.tipe === "violation"
-          ? {
-              id: report.violation?.id,
-              nama: report.violation?.nama,
-              kategori: report.violation?.kategori,
-              point: report.violation?.point,
-            }
-          : {
-              id: report.achievement?.id,
-              nama: report.achievement?.nama,
-              kategori: report.achievement?.kategori,
-              point: report.achievement?.point,
-            },
+      item: {
+        id: report.item?.id,
+        nama: report.item?.nama,
+        kategori: report.item?.kategori,
+        point: report.item?.point,
+      },
       tanggal: report.tanggal,
       waktu: report.waktu,
       deskripsi: report.deskripsi,
@@ -863,10 +812,10 @@ const getMyReportsByAcademicYear = async (req, res) => {
       summary: {
         totalReports: total,
         violationReports: await prisma.studentReport.count({
-          where: { ...whereClause, tipe: "violation" },
+          where: { ...whereClause, item: { tipe: "pelanggaran" } },
         }),
         achievementReports: await prisma.studentReport.count({
-          where: { ...whereClause, tipe: "achievement" },
+          where: { ...whereClause, item: { tipe: "prestasi" } },
         }),
       },
     });
@@ -928,7 +877,7 @@ const getAcademicYearStats = async (req, res) => {
         prisma.studentReport.count({
           where: {
             reporterId: userId,
-            tipe: "violation",
+            item: { tipe: "pelanggaran" },
             tanggal: dateFilter,
           },
         }),
@@ -937,7 +886,7 @@ const getAcademicYearStats = async (req, res) => {
         prisma.studentReport.count({
           where: {
             reporterId: userId,
-            tipe: "achievement",
+            item: { tipe: "prestasi" },
             tanggal: dateFilter,
           },
         }),
@@ -949,7 +898,7 @@ const getAcademicYearStats = async (req, res) => {
             tanggal: dateFilter,
           },
           select: {
-            tipe: true,
+            item: { select: { tipe: true } },
             tanggal: true,
             pointSaat: true,
           },
@@ -970,9 +919,9 @@ const getAcademicYearStats = async (req, res) => {
         };
       }
 
-      if (report.tipe === "violation") {
+      if (report.item?.tipe === "pelanggaran") {
         monthlyBreakdown[month].violations++;
-      } else {
+      } else if (report.item?.tipe === "prestasi") {
         monthlyBreakdown[month].achievements++;
       }
 

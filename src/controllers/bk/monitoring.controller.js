@@ -1,13 +1,10 @@
+const { PrismaClient } = require("@prisma/client");
+const prisma = new PrismaClient();
+
 // Search students by NISN or name (across all classes, active year only)
 const searchStudents = async (req, res) => {
   const { q } = req.query;
   try {
-    const activeYear = await prisma.tahunAjaran.findFirst({
-      where: { isActive: true },
-    });
-    if (!activeYear) {
-      return res.status(404).json({ error: "No active academic year found" });
-    }
     const students = await prisma.student.findMany({
       where: {
         OR: [
@@ -35,25 +32,16 @@ const searchStudents = async (req, res) => {
     res.status(500).json({ error: "Failed to search students" });
   }
 };
-const { PrismaClient } = require("@prisma/client");
-const prisma = new PrismaClient();
 
 const getClassroomWithReports = async (req, res) => {
   try {
     // Ambil tahun ajaran aktif
-    const activeYear = await prisma.tahunAjaran.findFirst({
-      where: { isActive: true },
-    });
-    if (!activeYear) {
-      return res.status(404).json({ error: "No active academic year found" });
-    }
 
     const classrooms = await prisma.classroom.findMany({
       include: {
         students: {
           include: {
             reports: {
-              where: { tahunAjaranId: activeYear.id },
               include: { item: true },
             },
           },
@@ -100,25 +88,21 @@ const getClassroomWithReports = async (req, res) => {
   }
 };
 
-// Ambil data siswa dalam kelas tertentu (berdasarkan tahun ajaran aktif)
+// Ambil data siswa dalam kelas tertentu (berdasarkan tahun ajaran yang dipilih atau aktif)
 const getStudents = async (req, res) => {
   const { classroomId } = req.params;
+  const { tahunAjaranId } = req.query;
   try {
-    // Ambil tahun ajaran aktif
-    const activeYear = await prisma.tahunAjaran.findFirst({
-      where: { isActive: true },
-    });
-    if (!activeYear) {
-      return res.status(404).json({ error: "No active academic year found" });
-    }
-
     // Ambil semua siswa di kelas tersebut
     const students = await prisma.student.findMany({
       where: { classroomId: parseInt(classroomId) },
       include: {
         user: { select: { name: true } },
         reports: {
-          where: { tahunAjaranId: activeYear.id },
+          where:
+            tahunAjaranId && tahunAjaranId !== "all"
+              ? { tahunAjaranId: parseInt(tahunAjaranId) }
+              : {},
           include: { item: true },
         },
       },
@@ -159,34 +143,23 @@ const getStudentDetailBK = async (req, res) => {
   const { nisn } = req.params;
   const { tahunAjaranId } = req.query;
   try {
-    // Ambil tahun ajaran yang dipilih atau aktif
-    let tahunAjaran;
-    if (tahunAjaranId) {
-      tahunAjaran = await prisma.tahunAjaran.findUnique({
-        where: { id: parseInt(tahunAjaranId) },
-      });
-    } else {
-      tahunAjaran = await prisma.tahunAjaran.findFirst({
-        where: { isActive: true },
-      });
-    }
-    if (!tahunAjaran) {
-      return res.status(404).json({ error: "Academic year not found" });
-    }
-
     // Ambil data siswa berdasarkan NISN
     const student = await prisma.student.findUnique({
       where: { nisn },
       include: {
         user: { select: { name: true } },
-        classroom: { select: { namaKelas: true } },
+        classroom: { select: { kodeKelas: true } },
         angkatan: { select: { tahun: true } },
         reports: {
-          where: { tahunAjaranId: tahunAjaran.id },
+          where:
+            tahunAjaranId && tahunAjaranId !== "all"
+              ? { tahunAjaranId: parseInt(tahunAjaranId) }
+              : {},
           include: {
             item: true,
             reporter: { select: { name: true, role: true } },
             bukti: true,
+            tahunAjaran: { select: { tahunAjaran: true } },
           },
           orderBy: { tanggal: "desc" },
         },
@@ -199,20 +172,22 @@ const getStudentDetailBK = async (req, res) => {
     // Hitung total pelanggaran, prestasi, dan score
     let totalPelanggaran = 0;
     let totalPrestasi = 0;
-    let totalScore = 0;
+    let subtotalScore = 0;
     student.reports.forEach((report) => {
       if (report.item.tipe === "pelanggaran") {
         totalPelanggaran++;
-        totalScore -= report.pointSaat || 0;
+        subtotalScore -= report.pointSaat || 0;
       } else if (report.item.tipe === "prestasi") {
         totalPrestasi++;
-        totalScore += report.pointSaat || 0;
+        subtotalScore += report.pointSaat || 0;
       }
     });
 
     // Format laporan siswa
     const laporan = student.reports.map((report) => ({
       id: report.id,
+      tahunAjaran: report.tahunAjaran?.tahunAjaran || null,
+      namaTahunAjaran: report.tahunAjaran?.tahunAjaran || null,
       tanggal: report.tanggal,
       tipe: report.item.tipe,
       namaItem: report.item.nama,
@@ -228,11 +203,12 @@ const getStudentDetailBK = async (req, res) => {
       siswa: {
         nisn: student.nisn,
         nama: student.user?.name,
-        kelas: student.classroom?.namaKelas,
+        kelas: student.classroom?.kodeKelas,
         angkatan: student.angkatan?.tahun,
         totalPelanggaran,
         totalPrestasi,
-        totalScore,
+        subtotalScore,
+        totalScore: student.totalScore,
       },
       laporan,
     });

@@ -46,11 +46,17 @@ const getStudentDashboardByAcademicYear = async (req, res) => {
       prisma.studentReport.findMany({
         where: {
           studentId: student.id,
-          tipe: "violation",
+          item: {
+            tipe: "pelanggaran",
+          },
           tanggal: dateFilter,
         },
         include: {
-          violation: true,
+          item: {
+            include: {
+              kategori: true,
+            },
+          },
           reporter: {
             select: { name: true },
           },
@@ -61,11 +67,17 @@ const getStudentDashboardByAcademicYear = async (req, res) => {
       prisma.studentReport.findMany({
         where: {
           studentId: student.id,
-          tipe: "achievement",
+          item: {
+            tipe: "prestasi",
+          },
           tanggal: dateFilter,
         },
         include: {
-          achievement: true,
+          item: {
+            include: {
+              kategori: true,
+            },
+          },
           reporter: {
             select: { name: true },
           },
@@ -97,7 +109,7 @@ const getStudentDashboardByAcademicYear = async (req, res) => {
         };
       }
 
-      if (report.tipe === "violation") {
+      if (report.item.tipe === "pelanggaran") {
         monthlyStats[month].violations++;
         monthlyStats[month].points += report.pointSaat || 0;
       } else {

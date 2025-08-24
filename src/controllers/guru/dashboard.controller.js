@@ -71,13 +71,13 @@ const getGuruDashboard = async (req, res) => {
             student: {
               classroomId: classroom.id,
             },
-            tipe: "violation",
+            item: { tipe: "pelanggaran" },
             createdAt: {
               gte: oneMonthAgo,
             },
           },
           include: {
-            violation: true,
+            item: true,
             student: {
               include: {
                 user: true,
@@ -85,7 +85,9 @@ const getGuruDashboard = async (req, res) => {
             },
             reporter: true,
           },
-          orderBy: { createdAt: "desc" },
+          orderBy: {
+            createdAt: "desc",
+          },
           take: 10,
         }),
         prisma.studentReport.findMany({
@@ -93,13 +95,13 @@ const getGuruDashboard = async (req, res) => {
             student: {
               classroomId: classroom.id,
             },
-            tipe: "achievement",
+            item: { tipe: "prestasi" },
             createdAt: {
               gte: oneMonthAgo,
             },
           },
           include: {
-            achievement: true,
+            item: true,
             student: {
               include: {
                 user: true,
@@ -107,7 +109,9 @@ const getGuruDashboard = async (req, res) => {
             },
             reporter: true,
           },
-          orderBy: { createdAt: "desc" },
+          orderBy: {
+            createdAt: "desc",
+          },
           take: 10,
         }),
       ]);
@@ -155,7 +159,7 @@ const getGuruDashboard = async (req, res) => {
           prisma.student.count(),
           prisma.studentReport.count({
             where: {
-              tipe: "violation",
+              item: { tipe: "pelanggaran" },
               createdAt: {
                 gte: new Date(
                   new Date().getFullYear(),
@@ -167,7 +171,7 @@ const getGuruDashboard = async (req, res) => {
           }),
           prisma.studentReport.count({
             where: {
-              tipe: "achievement",
+              item: { tipe: "prestasi" },
               createdAt: {
                 gte: new Date(
                   new Date().getFullYear(),
@@ -232,11 +236,11 @@ const getMyClassStudents = async (req, res) => {
             },
           },
           reports: {
-            where: { tipe: "violation" },
+            where: { item: { tipe: "pelanggaran" } },
             orderBy: { createdAt: "desc" },
             take: 3,
             include: {
-              violation: {
+              item: {
                 select: {
                   nama: true,
                   point: true,
@@ -271,8 +275,8 @@ const getMyClassStudents = async (req, res) => {
         violationCount: s.reports.length,
         achievementCount: 0, // Will need separate query for achievements
         recentViolations: s.reports.map((r) => ({
-          nama: r.violation?.nama || "Unknown",
-          point: r.violation?.point || 0,
+          nama: r.item?.nama || "Unknown",
+          point: r.item?.point || 0,
           tanggal: r.createdAt,
         })),
       };
