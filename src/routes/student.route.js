@@ -5,6 +5,7 @@ const {
   getMyDashboard,
   getMyViolations,
   getMyAchievements,
+  getMySuratPeringatan,
 } = require("../controllers/siswa/dashboard.controller");
 const {
   getMyProfile,
@@ -41,5 +42,7 @@ router.get(
   authenticate,
   getUnreadNotificationsCount
 );
+
+router.get("/me/surat-peringatan", authenticate, getMySuratPeringatan);
 
 module.exports = router;

@@ -24,30 +24,23 @@ const getMyDashboard = async (req, res) => {
       select: {
         id: true,
         nisn: true,
-        gender: true,
-        tempatLahir: true,
-        tglLahir: true,
-        alamat: true,
-        noHp: true,
         totalScore: true,
         user: {
           select: {
             id: true,
             name: true,
-            email: true,
             role: true,
           },
         },
         classroom: {
           select: {
             id: true,
-            namaKelas: true,
+            kodeKelas: true,
             waliKelas: {
               select: {
                 user: {
                   select: {
                     name: true,
-                    email: true,
                   },
                 },
               },
@@ -85,7 +78,6 @@ const getMyDashboard = async (req, res) => {
             reporter: {
               select: {
                 name: true,
-                role: true,
               },
             },
           },
@@ -173,13 +165,7 @@ const getMyDashboard = async (req, res) => {
         id: studentData.id,
         nisn: studentData.nisn,
         nama: studentData.user?.name || null,
-        jenisKelamin: studentData.gender,
-        tempatLahir: studentData.tempatLahir,
-        tglLahir: studentData.tglLahir,
-        alamat: studentData.alamat,
-        noHp: studentData.noHp,
-        email: studentData.user?.email || null,
-        kelas: studentData.classroom?.namaKelas || null,
+        kelas: studentData.classroom?.kodeKelas || null,
         angkatan: studentData.angkatan?.tahun || null,
         waliKelas: studentData.classroom?.waliKelas?.user?.name || null,
         classroomId: studentData.classroom?.id || null,
@@ -352,8 +338,34 @@ const getMyAchievements = async (req, res) => {
   }
 };
 
+// Get Surat Peringatan milik siswa yang login
+const getMySuratPeringatan = async (req, res) => {
+  const userId = req.user.id;
+  try {
+    // Cari student berdasarkan userId
+    const student = await prisma.student.findUnique({
+      where: { userId: userId },
+      select: { id: true },
+    });
+    if (!student) {
+      return res.status(404).json({ error: "Data siswa tidak ditemukan" });
+    }
+    // Ambil semua surat peringatan milik siswa ini
+    const suratPeringatan = await prisma.suratPeringatan.findMany({
+      where: { studentId: student.id },
+      orderBy: { tingkatSurat: "desc" },
+    });
+    res.json({ data: suratPeringatan });
+  } catch (err) {
+    console.error("Error fetching surat peringatan:", err);
+    res.status(500).json({ error: "Gagal mengambil surat peringatan" });
+  }
+};
+
 module.exports = {
   getMyDashboard,
   getMyViolations,
   getMyAchievements,
+  getMySuratPeringatan,
+  getMySuratPeringatan,
 };

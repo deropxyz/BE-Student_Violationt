@@ -2,6 +2,47 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 // ============= SISTEM OTOMATISASI SURAT PERINGATAN =============
+// Create konfigurasi automasi
+const createAutomasiConfig = async (req, res) => {
+  try {
+    const {
+      nama,
+      threshold,
+      jenisSurat,
+      tingkat,
+      judulTemplate,
+      isiTemplate,
+      isActive,
+    } = req.body;
+    const config = await prisma.automasiConfig.create({
+      data: {
+        nama,
+        threshold: parseInt(threshold),
+        jenisSurat,
+        tingkat: tingkat ? parseInt(tingkat) : 1,
+        judulTemplate,
+        isiTemplate,
+        isActive: isActive !== undefined ? isActive : true,
+      },
+    });
+    res.json({ success: true, config });
+  } catch (error) {
+    console.error("Error create automasi config:", error);
+    res.status(500).json({ error: "Gagal membuat konfigurasi automasi" });
+  }
+};
+
+// Delete konfigurasi automasi
+const deleteAutomasiConfig = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.automasiConfig.delete({ where: { id: parseInt(id) } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error delete automasi config:", error);
+    res.status(500).json({ error: "Gagal menghapus konfigurasi automasi" });
+  }
+};
 
 // Fungsi untuk cek dan trigger surat peringatan otomatis
 const checkAndTriggerSuratPeringatan = async (
@@ -93,10 +134,6 @@ const createSuratPeringatan = async (studentId, config, totalScore) => {
         pesan: `Anda menerima ${config.nama} karena total poin pelanggaran mencapai ${totalScore}. Silakan perbaiki perilaku Anda.`,
       },
     });
-
-    // TODO: Integrate dengan service email/SMS untuk kirim surat
-    // await sendEmail(emailSiswa, suratPeringatan.judul, isiSurat);
-    // if (emailOrtu) await sendEmail(emailOrtu, suratPeringatan.judul, isiSurat);
 
     console.log(
       `Surat peringatan ${config.jenisSurat} dibuat untuk siswa ${student.user.name} (Score: ${totalScore})`
@@ -354,6 +391,8 @@ module.exports = {
   createSuratPeringatan,
   getAutomasiConfig,
   updateAutomasiConfig,
+  createAutomasiConfig,
+  deleteAutomasiConfig,
   getHistorySuratPeringatan,
   getDetailSuratPeringatan,
   manualTriggerSurat,

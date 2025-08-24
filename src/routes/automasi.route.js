@@ -6,6 +6,8 @@ const {
   getDetailSuratPeringatan,
   manualTriggerSurat,
   updateStatusKirimSurat,
+  createAutomasiConfig,
+  deleteAutomasiConfig,
 } = require("../controllers/bk/automasi.controller");
 
 const { authenticate, requireRole } = require("../middlewares/auth.middleware");
@@ -16,6 +18,15 @@ const router = express.Router();
 
 // Get konfigurasi automasi (BK only)
 router.get("/config", authenticate, requireRole("bk"), getAutomasiConfig);
+
+router.post("/config", authenticate, requireRole("bk"), createAutomasiConfig);
+
+router.delete(
+  "/config/:id",
+  authenticate,
+  requireRole("bk"),
+  deleteAutomasiConfig
+);
 
 // Update konfigurasi automasi (BK only)
 router.put(
