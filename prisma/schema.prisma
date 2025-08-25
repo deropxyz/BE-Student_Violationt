@@ -37,7 +37,8 @@ model User {
   student        Student?
   teacher        Teacher?
   orangTua       OrangTua?
-  studentReports StudentReport[] @relation("ReportReporter")
+  studentReports StudentReport[]   @relation("ReportReporter")
+  bkAdjustments  PointAdjustment[] @relation("BKAdjustment")
 }
 
 model Student {
@@ -61,10 +62,11 @@ model Student {
   orangTua    OrangTua?  @relation(fields: [orangTuaId], references: [id])
   orangTuaId  Int?
 
-  reports         StudentReport[]
-  notifications   Notification[]
-  scoreHistory    ScoreHistory[]
-  suratPeringatan SuratPeringatan[]
+  reports          StudentReport[]
+  notifications    Notification[]
+  scoreHistory     ScoreHistory[]
+  suratPeringatan  SuratPeringatan[]
+  pointAdjustments PointAdjustment[]
 }
 
 model Teacher {
@@ -285,4 +287,29 @@ model ScoreHistory {
   alasan    String // "Pelanggaran", "Prestasi", "Reset Kelas", etc
   tanggal   DateTime @default(now())
   createdAt DateTime @default(now())
+}
+
+// Model untuk adjustment point oleh BK
+model PointAdjustment {
+  id        Int     @id @default(autoincrement())
+  student   Student @relation(fields: [studentId], references: [id])
+  studentId Int
+  teacher   User    @relation("BKAdjustment", fields: [teacherId], references: [id])
+  teacherId Int
+
+  pointPengurangan Int // jumlah point yang dikurangi (positif)
+  alasan           String // alasan pengurangan point
+  keterangan       String? // keterangan tambahan
+
+  // Point siswa sebelum dan sesudah adjustment
+  pointSebelum Int
+  pointSesudah Int
+
+  tanggal   DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+  @@index([teacherId])
+  @@index([tanggal])
 }

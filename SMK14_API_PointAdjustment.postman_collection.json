@@ -1,0 +1,101 @@
+{
+  "info": {
+    "_postman_id": "point-adjustment-2025-08-26",
+    "name": "SMK14 API - Point Adjustment",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Point Adjustment",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"pointPengurangan\": 10,\n  \"alasan\": \"Sudah memperbaiki perilaku\",\n  \"keterangan\": \"Contoh adjustment\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/bk/students/1/adjust-points",
+          "host": ["{{base_url}}"],
+          "path": ["api", "bk", "students", "1", "adjust-points"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get All Point Adjustments",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/bk/adjustments?page=1&limit=10",
+          "host": ["{{base_url}}"],
+          "path": ["api", "bk", "adjustments"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "10" }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Adjustment Statistics",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/bk/adjustments/statistics",
+          "host": ["{{base_url}}"],
+          "path": ["api", "bk", "adjustments", "statistics"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Students For Monitoring",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/bk/monitoring/students?page=1&limit=10",
+          "host": ["{{base_url}}"],
+          "path": ["api", "bk", "monitoring", "students"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "10" }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Student Monitoring Detail",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/bk/monitoring/students/1",
+          "host": ["{{base_url}}"],
+          "path": ["api", "bk", "monitoring", "students", "1"]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3000" },
+    { "key": "token", "value": "" }
+  ]
+}

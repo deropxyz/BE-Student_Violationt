@@ -464,9 +464,7 @@ const getStudentDetail = async (req, res) => {
       nama: student.name,
       email: student.email,
       nisn: student.student?.nisn || null,
-      kelas: student.student?.classroom
-        ? `${student.student.classroom.namaKelas} ${student.student.classroom.kodeKelas}`
-        : null,
+      kelas: student.student?.classroom?.kodeKelas || null,
       classroomId: student.student?.classroom?.id || null,
       gender: student.student?.gender || null,
       noHp: student.student?.noHp || null,
