@@ -8,6 +8,8 @@ const {
   createPointAdjustment,
   getAllPointAdjustments,
   getAdjustmentStatistics,
+  getStudentsForMonitoring,
+  getStudentMonitoringDetail,
 } = require("../controllers/bk/monitoring.controller");
 
 const { authenticate, requireRole } = require("../middlewares/auth.middleware");
@@ -18,6 +20,19 @@ router.get("/classrooms/:classroomId/students", authenticate, getStudents);
 router.get("/students/:nisn", authenticate, getStudentDetailBK);
 router.get("/students", authenticate, searchStudents); // /api/bk/students?q=namaAtauNisn
 
+// Point Adjustment Routes
+router.get(
+  "/monitoring/students",
+  authenticate,
+  requireRole("bk"),
+  getStudentsForMonitoring
+);
+router.get(
+  "/monitoring/students/:studentId",
+  authenticate,
+  requireRole("bk"),
+  getStudentMonitoringDetail
+);
 router.post(
   "/students/:studentId/adjust-points",
   authenticate,

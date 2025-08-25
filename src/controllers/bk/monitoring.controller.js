@@ -218,6 +218,241 @@ const getStudentDetailBK = async (req, res) => {
   }
 };
 
+// Get all students with their total scores for monitoring
+const getStudentsForMonitoring = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      classroomId,
+      search,
+      sortBy = "totalScore",
+      sortOrder = "desc",
+      minScore,
+      maxScore,
+    } = req.query;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Build where conditions
+    let whereConditions = {
+      role: "siswa",
+    };
+
+    // Filter by classroom if provided
+    if (classroomId) {
+      whereConditions.student = {
+        classroomId: parseInt(classroomId),
+      };
+    }
+
+    // Add search functionality
+    if (search) {
+      whereConditions.OR = [
+        { student: { nisn: { contains: search, mode: "insensitive" } } },
+        { name: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
+    // Filter by score range
+    if (minScore || maxScore) {
+      whereConditions.student = {
+        ...whereConditions.student,
+        totalScore: {
+          ...(minScore && { gte: parseInt(minScore) }),
+          ...(maxScore && { lte: parseInt(maxScore) }),
+        },
+      };
+    }
+
+    const [students, total] = await Promise.all([
+      prisma.user.findMany({
+        where: whereConditions,
+        include: {
+          student: {
+            include: {
+              classroom: {
+                select: {
+                  id: true,
+                  namaKelas: true,
+                  kodeKelas: true,
+                },
+              },
+              angkatan: {
+                select: {
+                  id: true,
+                  tahun: true,
+                },
+              },
+              pointAdjustments: {
+                take: 5,
+                orderBy: { createdAt: "desc" },
+                include: {
+                  teacher: {
+                    select: {
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy:
+          sortBy === "name"
+            ? { name: sortOrder }
+            : { student: { totalScore: sortOrder } },
+        skip,
+        take: parseInt(limit),
+      }),
+      prisma.user.count({
+        where: whereConditions,
+      }),
+    ]);
+
+    const formattedStudents = students.map((user) => ({
+      id: user.id,
+      nisn: user.student?.nisn || null,
+      nama: user.name,
+      email: user.email,
+      totalScore: user.student?.totalScore || 0,
+      kelas: user.student?.classroom
+        ? {
+            id: user.student.classroom.id,
+            nama: user.student.classroom.namaKelas,
+            kode: user.student.classroom.kodeKelas,
+          }
+        : null,
+      angkatan: user.student?.angkatan
+        ? {
+            id: user.student.angkatan.id,
+            tahun: user.student.angkatan.tahun,
+          }
+        : null,
+      recentAdjustments: user.student?.pointAdjustments || [],
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    }));
+
+    res.json({
+      data: formattedStudents,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit)),
+      },
+    });
+  } catch (err) {
+    console.error("Error getting students for monitoring:", err);
+    res.status(500).json({ error: "Failed to fetch students for monitoring" });
+  }
+};
+
+// Get student detail with full adjustment history
+const getStudentMonitoringDetail = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+
+    const student = await prisma.user.findUnique({
+      where: {
+        id: parseInt(studentId),
+        role: "siswa",
+      },
+      include: {
+        student: {
+          include: {
+            classroom: {
+              select: {
+                id: true,
+                namaKelas: true,
+                kodeKelas: true,
+              },
+            },
+            angkatan: {
+              select: {
+                id: true,
+                tahun: true,
+              },
+            },
+            pointAdjustments: {
+              orderBy: { createdAt: "desc" },
+              include: {
+                bk: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+            reports: {
+              take: 10,
+              orderBy: { createdAt: "desc" },
+              include: {
+                item: {
+                  select: {
+                    nama: true,
+                    point: true,
+                    tipe: true,
+                  },
+                },
+                reporter: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+            scoreHistory: {
+              take: 10,
+              orderBy: { createdAt: "desc" },
+            },
+          },
+        },
+      },
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: "Student not found" });
+    }
+
+    const formattedStudent = {
+      id: student.id,
+      nama: student.name,
+      email: student.email,
+      nisn: student.student?.nisn || null,
+      totalScore: student.student?.totalScore || 0,
+      kelas: student.student?.classroom
+        ? {
+            id: student.student.classroom.id,
+            nama: student.student.classroom.namaKelas,
+            kode: student.student.classroom.kodeKelas,
+          }
+        : null,
+      angkatan: student.student?.angkatan
+        ? {
+            id: student.student.angkatan.id,
+            tahun: student.student.angkatan.tahun,
+          }
+        : null,
+      adjustmentHistory: student.student?.pointAdjustments || [],
+      recentReports: student.student?.reports || [],
+      scoreHistory: student.student?.scoreHistory || [],
+    };
+
+    res.json({
+      success: true,
+      data: formattedStudent,
+    });
+  } catch (err) {
+    console.error("Error getting student monitoring detail:", err);
+    res
+      .status(500)
+      .json({ error: "Failed to fetch student monitoring detail" });
+  }
+};
+
 // Create point adjustment (reduce points)
 const createPointAdjustment = async (req, res) => {
   try {
@@ -349,7 +584,7 @@ const getAllPointAdjustments = async (req, res) => {
       page = 1,
       limit = 10,
       studentId,
-      teacherId,
+      bkId,
       startDate,
       endDate,
     } = req.query;
@@ -362,9 +597,9 @@ const getAllPointAdjustments = async (req, res) => {
       whereConditions.studentId = parseInt(studentId);
     }
 
-    // Filter by Teacher/BK
-    if (teacherId) {
-      whereConditions.teacherId = parseInt(teacherId);
+    // Filter by BK
+    if (bkId) {
+      whereConditions.bkId = parseInt(bkId);
     }
 
     // Filter by date range
@@ -394,7 +629,7 @@ const getAllPointAdjustments = async (req, res) => {
               },
             },
           },
-          teacher: {
+          bk: {
             select: {
               name: true,
             },
@@ -418,8 +653,8 @@ const getAllPointAdjustments = async (req, res) => {
           ? `${adj.student.classroom.namaKelas} ${adj.student.classroom.kodeKelas}`
           : null,
       },
-      teacher: {
-        name: adj.teacher.name,
+      bk: {
+        name: adj.bk.name,
       },
       pointPengurangan: adj.pointPengurangan,
       alasan: adj.alasan,
@@ -489,9 +724,9 @@ const getAdjustmentStatistics = async (req, res) => {
         distinct: ["studentId"],
       }),
 
-      // Adjustments by Teacher/BK
+      // Adjustments by BK
       prisma.pointAdjustment.groupBy({
-        by: ["teacherId"],
+        by: ["bkId"],
         where: dateFilter,
         _count: {
           id: true,
@@ -514,7 +749,7 @@ const getAdjustmentStatistics = async (req, res) => {
               },
             },
           },
-          teacher: {
+          bk: {
             select: {
               name: true,
             },
@@ -525,11 +760,11 @@ const getAdjustmentStatistics = async (req, res) => {
       }),
     ]);
 
-    // Get Teacher/BK names for statistics
-    const teacherIds = adjustmentsByBK.map((adj) => adj.teacherId);
-    const teacherUsers = await prisma.user.findMany({
+    // Get BK names for statistics
+    const bkIds = adjustmentsByBK.map((adj) => adj.bkId);
+    const bkUsers = await prisma.user.findMany({
       where: {
-        id: { in: teacherIds },
+        id: { in: bkIds },
       },
       select: {
         id: true,
@@ -537,23 +772,21 @@ const getAdjustmentStatistics = async (req, res) => {
       },
     });
 
-    const teacherMap = Object.fromEntries(
-      teacherUsers.map((teacher) => [teacher.id, teacher.name])
-    );
+    const bkMap = Object.fromEntries(bkUsers.map((bk) => [bk.id, bk.name]));
 
     const statistics = {
       totalAdjustments,
       totalPointsReduced: totalPointsReduced._sum.pointPengurangan || 0,
       studentsAffected: studentsAffected.length,
       adjustmentsByBK: adjustmentsByBK.map((adj) => ({
-        teacherName: teacherMap[adj.teacherId] || "Unknown",
+        bkName: bkMap[adj.bkId] || "Unknown",
         totalAdjustments: adj._count.id,
         totalPointsReduced: adj._sum.pointPengurangan || 0,
       })),
       recentAdjustments: recentAdjustments.map((adj) => ({
         id: adj.id,
         studentName: adj.student.user.name,
-        teacherName: adj.teacher.name,
+        bkName: adj.bk.name,
         pointPengurangan: adj.pointPengurangan,
         alasan: adj.alasan,
         tanggal: adj.tanggal,
@@ -575,6 +808,8 @@ module.exports = {
   getStudents,
   getStudentDetailBK,
   searchStudents,
+  getStudentsForMonitoring,
+  getStudentMonitoringDetail,
   createPointAdjustment,
   getAllPointAdjustments,
   getAdjustmentStatistics,
