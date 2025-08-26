@@ -182,10 +182,21 @@ const importViolations = async (req, res) => {
     for (const v of violations) {
       try {
         // Validasi minimal
-        if (!v.nama || !v.kategoriId || v.point === undefined) {
+        if (!v.nama || !v.kategoriNama || v.point === undefined) {
           failed.push({
             nama: v.nama,
-            reason: "Nama/kategori/point wajib diisi",
+            reason: "Nama/kategori/point wajib diisi (kategoriNama)",
+          });
+          continue;
+        }
+        // Cari kategori berdasarkan nama
+        const kategori = await prisma.kategori.findFirst({
+          where: { nama: v.kategoriNama, tipe: "pelanggaran" },
+        });
+        if (!kategori) {
+          failed.push({
+            nama: v.nama,
+            reason: `Kategori dengan nama '${v.kategoriNama}' tidak ditemukan`,
           });
           continue;
         }
@@ -193,7 +204,7 @@ const importViolations = async (req, res) => {
         const exist = await prisma.reportItem.findFirst({
           where: {
             nama: v.nama,
-            kategoriId: parseInt(v.kategoriId),
+            kategoriId: kategori.id,
             tipe: "pelanggaran",
           },
         });
@@ -209,7 +220,7 @@ const importViolations = async (req, res) => {
           data: {
             nama: v.nama,
             tipe: "pelanggaran",
-            kategoriId: parseInt(v.kategoriId),
+            kategoriId: kategori.id,
             jenis: v.jenis || null,
             point: parseInt(v.point),
             isActive: v.isActive !== undefined ? !!v.isActive : true,
