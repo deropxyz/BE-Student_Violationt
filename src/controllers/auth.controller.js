@@ -104,7 +104,43 @@ const resetPassword = async (req, res) => {
   }
 };
 
+// Ganti password guru
+const changePassword = async (req, res) => {
+  try {
+    const userId = req.user.id; // pastikan middleware auth mengisi req.user
+    const { oldPassword, newPassword } = req.body;
+    if (!oldPassword || !newPassword) {
+      return res
+        .status(400)
+        .json({ message: "Password lama dan baru wajib diisi" });
+    }
+    if (newPassword.length < 6) {
+      return res
+        .status(400)
+        .json({ message: "Password baru minimal 6 karakter" });
+    }
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
+    }
+    const match = await bcrypt.compare(oldPassword, user.password);
+    if (!match) {
+      return res.status(400).json({ message: "Password lama salah" });
+    }
+    const hashed = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashed },
+    });
+    res.json({ message: "Password berhasil diubah" });
+  } catch (err) {
+    console.error("Error change password:", err);
+    res.status(500).json({ message: "Gagal mengubah password" });
+  }
+};
+
 module.exports = {
   login,
   resetPassword,
+  changePassword,
 };

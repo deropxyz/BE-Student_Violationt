@@ -130,15 +130,13 @@ const getMyDashboard = async (req, res) => {
       achievementsThisWeek: achievements.filter(
         (a) => new Date(a.createdAt) >= oneWeekAgo
       ).length,
+      creditScore: studentData.totalScore, // ambil dari database
     };
-
-    statistics.creditScore =
-      statistics.totalAchievementPoints - statistics.totalViolationPoints;
 
     // Determine risk level
     let riskLevel = "LOW";
-    if (statistics.totalViolationPoints >= 50) riskLevel = "HIGH";
-    else if (statistics.totalViolationPoints >= 25) riskLevel = "MEDIUM";
+    if (statistics.totalViolationPoints <= -200) riskLevel = "HIGH";
+    else if (statistics.totalViolationPoints <= -100) riskLevel = "MEDIUM";
 
     // Recent activity (gabungan violations dan achievements)
     const recentActivity = [
@@ -176,7 +174,7 @@ const getMyDashboard = async (req, res) => {
       summary: {
         ...statistics,
         riskLevel,
-        totalScore: statistics.creditScore,
+        totalScore: studentData.totalScore, // ambil dari database
       },
 
       // Data mentah untuk frontend processing
@@ -199,7 +197,70 @@ const getMyDashboard = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch dashboard" });
   }
 };
-
+// Get detail laporan milik siswa yang login
+const getMyReportDetail = async (req, res) => {
+  const userId = req.user.id;
+  const { reportId } = req.params;
+  try {
+    // Cari student berdasarkan userId
+    const student = await prisma.student.findUnique({
+      where: { userId: userId },
+      select: { id: true },
+    });
+    if (!student) {
+      return res.status(404).json({ error: "Data siswa tidak ditemukan" });
+    }
+    // Ambil detail laporan milik siswa ini
+    const report = await prisma.studentReport.findUnique({
+      where: { id: parseInt(reportId) },
+      include: {
+        item: { include: { kategori: true } },
+        reporter: { select: { name: true, role: true } },
+        bukti: true,
+        student: {
+          select: {
+            nisn: true,
+            user: { select: { name: true } },
+            classroom: { select: { kodeKelas: true } },
+            angkatan: { select: { tahun: true } },
+          },
+        },
+      },
+    });
+    if (!report || report.studentId !== student.id) {
+      return res
+        .status(404)
+        .json({ error: "Laporan tidak ditemukan atau bukan milik Anda" });
+    }
+    const detail = {
+      id: report.id,
+      tanggal: report.tanggal,
+      waktu: report.waktu,
+      deskripsi: report.deskripsi,
+      pointSaat: report.pointSaat,
+      item: {
+        nama: report.item.nama,
+        tipe: report.item.tipe,
+        kategori: report.item.kategori?.nama,
+        jenis: report.item.jenis,
+        point: report.item.point,
+      },
+      reporter: report.reporter.name,
+      reporterRole: report.reporter.role,
+      bukti: report.bukti,
+      student: {
+        nisn: report.student.nisn,
+        nama: report.student.user.name,
+        kelas: report.student.classroom?.kodeKelas,
+        angkatan: report.student.angkatan?.tahun,
+      },
+    };
+    res.json({ success: true, data: detail });
+  } catch (err) {
+    console.error("Error fetching report detail:", err);
+    res.status(500).json({ error: "Gagal mengambil detail laporan" });
+  }
+};
 // Get My Violations
 const getMyViolations = async (req, res) => {
   const userId = req.user.id;
@@ -368,4 +429,5 @@ module.exports = {
   getMyAchievements,
   getMySuratPeringatan,
   getMySuratPeringatan,
+  getMyReportDetail,
 };

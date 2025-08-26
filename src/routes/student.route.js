@@ -23,6 +23,11 @@ const {
 router.get("/dashboard", authenticate, getMyDashboard);
 router.get("/violations", authenticate, getMyViolations);
 router.get("/achievements", authenticate, getMyAchievements);
+// Detail laporan siswa
+const {
+  getMyReportDetail,
+} = require("../controllers/siswa/dashboard.controller");
+router.get("/report/:reportId", authenticate, getMyReportDetail);
 
 // Profile routes
 router.get("/profile", authenticate, getMyProfile);

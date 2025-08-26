@@ -112,14 +112,11 @@ const getStudents = async (req, res) => {
     const data = students.map((siswa) => {
       let pelanggaran = 0;
       let prestasi = 0;
-      let totalScore = 0;
       siswa.reports.forEach((report) => {
         if (report.item.tipe === "pelanggaran") {
           pelanggaran++;
-          totalScore -= report.pointSaat || 0;
         } else if (report.item.tipe === "prestasi") {
           prestasi++;
-          totalScore += report.pointSaat || 0;
         }
       });
       return {
@@ -127,7 +124,7 @@ const getStudents = async (req, res) => {
         nama: siswa.user?.name,
         pelanggaran,
         prestasi,
-        totalScore,
+        totalScore: siswa.totalScore, // ambil dari database
       };
     });
 
@@ -379,7 +376,7 @@ const getStudentMonitoringDetail = async (req, res) => {
             pointAdjustments: {
               orderBy: { createdAt: "desc" },
               include: {
-                bk: {
+                teacher: {
                   select: {
                     name: true,
                   },
@@ -502,7 +499,11 @@ const createPointAdjustment = async (req, res) => {
     }
 
     const pointSebelum = student.totalScore;
-    const pointSesudah = Math.max(0, pointSebelum - parseInt(pointPengurangan)); // Tidak boleh negatif
+    let pointSesudah = pointSebelum + parseInt(pointPengurangan);
+    // Clamp to 0 if result is positive
+    if (pointSesudah > 0) {
+      pointSesudah = 0;
+    }
     const actualPengurangan = pointSebelum - pointSesudah;
 
     // Create point adjustment in transaction
@@ -584,7 +585,7 @@ const getAllPointAdjustments = async (req, res) => {
       page = 1,
       limit = 10,
       studentId,
-      bkId,
+      teacherId,
       startDate,
       endDate,
     } = req.query;
@@ -597,9 +598,9 @@ const getAllPointAdjustments = async (req, res) => {
       whereConditions.studentId = parseInt(studentId);
     }
 
-    // Filter by BK
-    if (bkId) {
-      whereConditions.bkId = parseInt(bkId);
+    // Filter by Teacher
+    if (teacherId) {
+      whereConditions.teacherId = parseInt(teacherId);
     }
 
     // Filter by date range
@@ -629,7 +630,7 @@ const getAllPointAdjustments = async (req, res) => {
               },
             },
           },
-          bk: {
+          teacher: {
             select: {
               name: true,
             },
@@ -653,8 +654,8 @@ const getAllPointAdjustments = async (req, res) => {
           ? `${adj.student.classroom.namaKelas} ${adj.student.classroom.kodeKelas}`
           : null,
       },
-      bk: {
-        name: adj.bk.name,
+      teacher: {
+        name: adj.teacher.name,
       },
       pointPengurangan: adj.pointPengurangan,
       alasan: adj.alasan,
@@ -724,9 +725,9 @@ const getAdjustmentStatistics = async (req, res) => {
         distinct: ["studentId"],
       }),
 
-      // Adjustments by BK
+      // Adjustments by Teacher
       prisma.pointAdjustment.groupBy({
-        by: ["bkId"],
+        by: ["teacherId"],
         where: dateFilter,
         _count: {
           id: true,
@@ -749,7 +750,7 @@ const getAdjustmentStatistics = async (req, res) => {
               },
             },
           },
-          bk: {
+          teacher: {
             select: {
               name: true,
             },
@@ -760,11 +761,11 @@ const getAdjustmentStatistics = async (req, res) => {
       }),
     ]);
 
-    // Get BK names for statistics
-    const bkIds = adjustmentsByBK.map((adj) => adj.bkId);
-    const bkUsers = await prisma.user.findMany({
+    // Get Teacher names for statistics
+    const teacherIds = adjustmentsByBK.map((adj) => adj.teacherId);
+    const teacherUsers = await prisma.user.findMany({
       where: {
-        id: { in: bkIds },
+        id: { in: teacherIds },
       },
       select: {
         id: true,
@@ -772,21 +773,23 @@ const getAdjustmentStatistics = async (req, res) => {
       },
     });
 
-    const bkMap = Object.fromEntries(bkUsers.map((bk) => [bk.id, bk.name]));
+    const teacherMap = Object.fromEntries(
+      teacherUsers.map((t) => [t.id, t.name])
+    );
 
     const statistics = {
       totalAdjustments,
       totalPointsReduced: totalPointsReduced._sum.pointPengurangan || 0,
       studentsAffected: studentsAffected.length,
       adjustmentsByBK: adjustmentsByBK.map((adj) => ({
-        bkName: bkMap[adj.bkId] || "Unknown",
+        teacherName: teacherMap[adj.teacherId] || "Unknown",
         totalAdjustments: adj._count.id,
         totalPointsReduced: adj._sum.pointPengurangan || 0,
       })),
       recentAdjustments: recentAdjustments.map((adj) => ({
         id: adj.id,
         studentName: adj.student.user.name,
-        bkName: adj.bk.name,
+        teacherName: adj.teacher.name,
         pointPengurangan: adj.pointPengurangan,
         alasan: adj.alasan,
         tanggal: adj.tanggal,
