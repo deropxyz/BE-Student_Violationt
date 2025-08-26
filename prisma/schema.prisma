@@ -36,7 +36,6 @@ model User {
 
   student        Student?
   teacher        Teacher?
-  orangTua       OrangTua?
   studentReports StudentReport[]   @relation("ReportReporter")
   bkAdjustments  PointAdjustment[] @relation("BKAdjustment")
 }
@@ -51,16 +50,17 @@ model Student {
   tglLahir    DateTime
   alamat      String
   noHp        String?
+  namaOrtu    String?
+  nohpOrtu    String?
   totalScore  Int       @default(0)
   isArchived  Boolean   @default(false)
   archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
 
   classroom   Classroom? @relation(fields: [classroomId], references: [id])
   classroomId Int?
   angkatan    Angkatan   @relation(fields: [angkatanId], references: [id])
   angkatanId  Int
-  orangTua    OrangTua?  @relation(fields: [orangTuaId], references: [id])
-  orangTuaId  Int?
 
   reports          StudentReport[]
   notifications    Notification[]
@@ -70,25 +70,16 @@ model Student {
 }
 
 model Teacher {
-  id     Int     @id @default(autoincrement())
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId Int     @unique
-  nip    String  @unique
-  noHp   String?
-  alamat String?
-
-  classrooms Classroom[] @relation("WaliKelas")
-}
-
-model OrangTua {
-  id        Int     @id @default(autoincrement())
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    Int     @unique
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int      @unique
+  nip       String   @unique
   noHp      String?
   alamat    String?
-  pekerjaan String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  children Student[]
+  classrooms Classroom[] @relation("WaliKelas")
 }
 
 model Classroom {
@@ -102,8 +93,10 @@ model Classroom {
 }
 
 model Angkatan {
-  id    Int    @id @default(autoincrement())
-  tahun String @unique
+  id        Int      @id @default(autoincrement())
+  tahun     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   students Student[]
 }
@@ -114,6 +107,7 @@ model kategori {
   tipe      TipeReport
   items     ReportItem[]
   createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 }
 
 model ReportItem {
@@ -126,6 +120,7 @@ model ReportItem {
   point      Int
   isActive   Boolean    @default(true)
   createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
   reports StudentReport[]
 }
@@ -136,6 +131,7 @@ model StudentReport {
   studentId  Int
   reporter   User    @relation("ReportReporter", fields: [reporterId], references: [id])
   reporterId Int
+  bukti      String?
 
   item   ReportItem @relation(fields: [itemId], references: [id])
   itemId Int
@@ -150,46 +146,7 @@ model StudentReport {
   deskripsi String?
   pointSaat Int
   createdAt DateTime  @default(now())
-
-  bukti ReportEvidence[]
-
-  // Relasi ke penanganan (hanya untuk violation)
-  penanganan Penanganan?
-}
-
-model ReportEvidence {
-  id        Int           @id @default(autoincrement())
-  report    StudentReport @relation(fields: [reportId], references: [id])
-  reportId  Int
-  url       String // link atau path file bukti
-  tipe      String? // contoh: "image", "pdf", "video"
-  createdAt DateTime      @default(now())
-}
-
-model TindakanOtomatis {
-  id           Int     @id @default(autoincrement())
-  minPoint     Int // minimal point untuk trigger
-  maxPoint     Int? // maksimal point (opsional)
-  namaTindakan String // SP1, Panggil Ortu, Drop Out
-  deskripsi    String
-  isActive     Boolean @default(true)
-
-  penanganan Penanganan[]
-}
-
-model Penanganan {
-  id                 Int               @id @default(autoincrement())
-  studentReport      StudentReport?    @relation(fields: [studentReportId], references: [id])
-  studentReportId    Int?              @unique
-  tindakanOtomatis   TindakanOtomatis? @relation(fields: [tindakanOtomatisId], references: [id])
-  tindakanOtomatisId Int?
-
-  jenisPenanganan   String
-  deskripsi         String
-  tanggalPenanganan DateTime @default(now())
-  penanggungJawab   String
-  statusSelesai     Boolean  @default(false)
-  catatanTambahan   String?
+  updatedAt DateTime  @updatedAt
 }
 
 model Notification {
@@ -272,6 +229,7 @@ model TahunAjaran {
   tanggalSelesai DateTime // 2024-06-30
   isActive       Boolean  @default(false)
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   // Relasi dengan StudentReport
   reports StudentReport[]
@@ -296,6 +254,7 @@ model PointAdjustment {
   studentId Int
   teacher   User    @relation("BKAdjustment", fields: [teacherId], references: [id])
   teacherId Int
+  bukti     String?
 
   pointPengurangan Int // jumlah point yang dikurangi (positif)
   alasan           String // alasan pengurangan point

@@ -318,7 +318,7 @@ const createTeacher = async (req, res) => {
     }
 
     // Hash password (use default if not provided)
-    const defaultPassword = password || "smkn14garut";
+    const defaultPassword = process.env.DEFAULT_PASSWORD;
     const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
     // Create user and teacher in transaction

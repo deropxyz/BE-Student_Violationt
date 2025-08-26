@@ -155,7 +155,6 @@ const getStudentDetailBK = async (req, res) => {
           include: {
             item: true,
             reporter: { select: { name: true, role: true } },
-            bukti: true,
             tahunAjaran: { select: { tahunAjaran: true } },
           },
           orderBy: { tanggal: "desc" },
@@ -268,6 +267,9 @@ const getStudentsForMonitoring = async (req, res) => {
         where: whereConditions,
         include: {
           student: {
+            where: {
+              isArchived: false,
+            },
             include: {
               classroom: {
                 select: {
@@ -289,6 +291,7 @@ const getStudentsForMonitoring = async (req, res) => {
                   teacher: {
                     select: {
                       name: true,
+                      role: true,
                     },
                   },
                 },
@@ -296,11 +299,6 @@ const getStudentsForMonitoring = async (req, res) => {
             },
           },
         },
-        orderBy:
-          sortBy === "name"
-            ? { name: sortOrder }
-            : { student: { totalScore: sortOrder } },
-        skip,
         take: parseInt(limit),
       }),
       prisma.user.count({

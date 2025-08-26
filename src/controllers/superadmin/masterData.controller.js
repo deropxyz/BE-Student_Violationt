@@ -15,6 +15,7 @@ const getAllClassrooms = async (req, res) => {
                   email: true,
                 },
               },
+              nip: true,
             },
           },
           _count: {
@@ -33,6 +34,7 @@ const getAllClassrooms = async (req, res) => {
       kodeKelas: c.kodeKelas,
       namaKelas: c.namaKelas,
       waliKelas: c.waliKelas?.user?.name || null,
+      nip: c.waliKelas?.nip || null,
       jumlahSiswa: c._count.students,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
@@ -417,7 +419,6 @@ const getAllAngkatan = async (req, res) => {
     const formattedAngkatan = angkatan.map((a) => ({
       id: a.id,
       tahun: a.tahun,
-      status: a.status,
       jumlahSiswa: a._count.students,
       createdAt: a.createdAt,
       updatedAt: a.updatedAt,
@@ -479,11 +480,11 @@ const getAngkatanById = async (req, res) => {
 
 const createAngkatan = async (req, res) => {
   try {
-    const { tahun, status = "aktif" } = req.body;
+    const { tahun } = req.body;
 
     // Check if angkatan already exists
     const existingAngkatan = await prisma.angkatan.findUnique({
-      where: { tahun },
+      where: { tahun: String(tahun) },
     });
 
     if (existingAngkatan) {
@@ -492,8 +493,7 @@ const createAngkatan = async (req, res) => {
 
     const angkatan = await prisma.angkatan.create({
       data: {
-        tahun,
-        status,
+        tahun: String(tahun),
       },
     });
 

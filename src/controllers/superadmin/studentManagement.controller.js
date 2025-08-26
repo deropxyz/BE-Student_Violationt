@@ -83,8 +83,10 @@ const getAllStudents = async (req, res) => {
         include: {
           student: {
             select: {
+              id: true,
               nisn: true,
               noHp: true,
+              gender: true,
               classroom: {
                 select: {
                   id: true,
@@ -111,7 +113,7 @@ const getAllStudents = async (req, res) => {
     ]);
 
     const formattedStudents = students.map((user) => ({
-      id: user.id,
+      id: user.student.id,
       nisn: user.student?.nisn || null,
       nama: user.name,
       email: user.email,
@@ -267,8 +269,9 @@ const createStudent = async (req, res) => {
       tglLahir,
       alamat,
       noHp,
+      namaOrtu,
+      nohpOrtu,
       angkatanId,
-      orangTuaId,
     } = req.body;
 
     // Validate required fields (classroomId tidak perlu karena dari params)
@@ -328,7 +331,7 @@ const createStudent = async (req, res) => {
     }
 
     // Hash default password
-    const defaultPassword = "smkn14garut";
+    const defaultPassword = process.env.DEFAULT_PASSWORD;
     const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
     // Create user first
@@ -353,7 +356,8 @@ const createStudent = async (req, res) => {
         noHp: noHp,
         classroomId: parseInt(classroomId), // Menggunakan classroomId dari params
         angkatanId: parseInt(angkatanId),
-        orangTuaId: orangTuaId ? parseInt(orangTuaId) : null,
+        namaOrtu: namaOrtu || null,
+        nohpOrtu: nohpOrtu || null,
       },
     });
 
@@ -429,27 +433,29 @@ const getStudentDetail = async (req, res) => {
   try {
     const { studentId } = req.params;
 
-    const student = await prisma.user.findUnique({
+    const student = await prisma.student.findUnique({
       where: {
         id: parseInt(studentId),
-        role: "siswa",
       },
       include: {
-        student: {
-          include: {
-            classroom: {
-              select: {
-                id: true,
-                namaKelas: true,
-                kodeKelas: true,
-              },
-            },
-            angkatan: {
-              select: {
-                id: true,
-                tahun: true,
-              },
-            },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        classroom: {
+          select: {
+            id: true,
+            namaKelas: true,
+            kodeKelas: true,
+          },
+        },
+        angkatan: {
+          select: {
+            id: true,
+            tahun: true,
           },
         },
       },
@@ -461,20 +467,24 @@ const getStudentDetail = async (req, res) => {
 
     const formattedStudent = {
       id: student.id,
-      nama: student.name,
-      email: student.email,
-      nisn: student.student?.nisn || null,
-      kelas: student.student?.classroom?.kodeKelas || null,
-      classroomId: student.student?.classroom?.id || null,
-      gender: student.student?.gender || null,
-      noHp: student.student?.noHp || null,
-      alamat: student.student?.alamat || null,
-      tempatLahir: student.student?.tempatLahir || null,
-      tglLahir: student.student?.tglLahir || null,
-      angkatan: student.student?.angkatan
+      nama: student.user?.name || null,
+      email: student.user?.email || null,
+      nisn: student.nisn || null,
+      kelas: student.classroom
+        ? `${student.classroom.namaKelas} ${student.classroom.kodeKelas}`
+        : null,
+      classroomId: student.classroom?.id || null,
+      gender: student.gender || null,
+      noHp: student.noHp || null,
+      alamat: student.alamat || null,
+      tempatLahir: student.tempatLahir || null,
+      tglLahir: student.tglLahir || null,
+      namaOrtu: student.namaOrtu || null,
+      nohpOrtu: student.nohpOrtu || null,
+      angkatan: student.angkatan
         ? {
-            id: student.student.angkatan.id,
-            tahun: student.student.angkatan.tahun,
+            id: student.angkatan.id,
+            tahun: student.angkatan.tahun,
           }
         : null,
     };
@@ -504,104 +514,92 @@ const updateStudent = async (req, res) => {
       noHp,
       classroomId,
       angkatanId,
+      namaOrtu,
+      nohpOrtu,
     } = req.body;
 
-    // Check if student exists
-    const existingStudent = await prisma.user.findUnique({
-      where: {
-        id: parseInt(studentId),
-        role: "siswa",
-      },
-      include: {
-        student: true,
-      },
+    // Cari student berdasarkan studentId
+    const existingStudent = await prisma.student.findUnique({
+      where: { id: parseInt(studentId) },
+      include: { user: true },
     });
 
     if (!existingStudent) {
       return res.status(404).json({ error: "Student not found" });
     }
 
-    // Check if NISN is already taken by another student
-    if (nisn && nisn !== existingStudent.student?.nisn) {
+    // Cek NISN sudah dipakai student lain
+    if (nisn && nisn !== existingStudent.nisn) {
       const existingNISN = await prisma.student.findFirst({
         where: {
           nisn: nisn,
-          userId: {
-            not: parseInt(studentId),
-          },
+          id: { not: parseInt(studentId) },
         },
       });
-
       if (existingNISN) {
         return res.status(400).json({ error: "NISN already exists" });
       }
     }
 
-    // Check if email is already taken by another user
-    if (email && email !== existingStudent.email) {
+    // Cek email sudah dipakai user lain
+    if (email && email !== existingStudent.user.email) {
       const existingEmail = await prisma.user.findFirst({
         where: {
           email: email,
-          id: {
-            not: parseInt(studentId),
-          },
+          id: { not: existingStudent.userId },
         },
       });
-
       if (existingEmail) {
         return res.status(400).json({ error: "Email already exists" });
       }
     }
 
     // Update user data
-    const updatedUser = await prisma.user.update({
-      where: { id: parseInt(studentId) },
+    await prisma.user.update({
+      where: { id: existingStudent.userId },
       data: {
-        name: name || existingStudent.name,
-        email: email || existingStudent.email,
+        name: name || existingStudent.user.name,
+        email: email || existingStudent.user.email,
       },
     });
 
     // Update student data
-    const updatedStudent = await prisma.student.update({
-      where: { userId: parseInt(studentId) },
+    await prisma.student.update({
+      where: { id: parseInt(studentId) },
       data: {
-        nisn: nisn || existingStudent.student?.nisn,
-        gender: gender || existingStudent.student?.gender,
-        tempatLahir: tempatLahir || existingStudent.student?.tempatLahir,
-        tglLahir: tglLahir
-          ? new Date(tglLahir)
-          : existingStudent.student?.tglLahir,
-        alamat: alamat || existingStudent.student?.alamat,
-        noHp: noHp || existingStudent.student?.noHp,
+        nisn: nisn || existingStudent.nisn,
+        gender: gender || existingStudent.gender,
+        tempatLahir: tempatLahir || existingStudent.tempatLahir,
+        tglLahir: tglLahir ? new Date(tglLahir) : existingStudent.tglLahir,
+        alamat: alamat || existingStudent.alamat,
+        noHp: noHp || existingStudent.noHp,
         classroomId: classroomId
           ? parseInt(classroomId)
-          : existingStudent.student?.classroomId,
+          : existingStudent.classroomId,
         angkatanId: angkatanId
           ? parseInt(angkatanId)
-          : existingStudent.student?.angkatanId,
+          : existingStudent.angkatanId,
+        namaOrtu: namaOrtu || existingStudent.namaOrtu,
+        nohpOrtu: nohpOrtu || existingStudent.nohpOrtu,
       },
     });
 
     // Fetch updated student with relations
-    const studentWithRelations = await prisma.user.findUnique({
+    const studentWithRelations = await prisma.student.findUnique({
       where: { id: parseInt(studentId) },
       include: {
-        student: {
-          include: {
-            classroom: {
-              select: {
-                id: true,
-                namaKelas: true,
-                kodeKelas: true,
-              },
-            },
-            angkatan: {
-              select: {
-                id: true,
-                tahun: true,
-              },
-            },
+        user: true,
+        classroom: {
+          select: {
+            id: true,
+            namaKelas: true,
+            kodeKelas: true,
+          },
+        },
+        angkatan: {
+          select: {
+            id: true,
+            tahun: true,
           },
         },
       },
@@ -609,22 +607,24 @@ const updateStudent = async (req, res) => {
 
     const formattedStudent = {
       id: studentWithRelations.id,
-      nama: studentWithRelations.name,
-      email: studentWithRelations.email,
-      nisn: studentWithRelations.student?.nisn || null,
-      kelas: studentWithRelations.student?.classroom
-        ? `${studentWithRelations.student.classroom.namaKelas} ${studentWithRelations.student.classroom.kodeKelas}`
+      nama: studentWithRelations.user?.name || null,
+      email: studentWithRelations.user?.email || null,
+      nisn: studentWithRelations.nisn || null,
+      kelas: studentWithRelations.classroom
+        ? `${studentWithRelations.classroom.namaKelas} ${studentWithRelations.classroom.kodeKelas}`
         : null,
-      classroomId: studentWithRelations.student?.classroom?.id || null,
-      gender: studentWithRelations.student?.gender || null,
-      noHp: studentWithRelations.student?.noHp || null,
-      alamat: studentWithRelations.student?.alamat || null,
-      tempatLahir: studentWithRelations.student?.tempatLahir || null,
-      tglLahir: studentWithRelations.student?.tglLahir || null,
-      angkatan: studentWithRelations.student?.angkatan
+      classroomId: studentWithRelations.classroom?.id || null,
+      gender: studentWithRelations.gender || null,
+      noHp: studentWithRelations.noHp || null,
+      alamat: studentWithRelations.alamat || null,
+      tempatLahir: studentWithRelations.tempatLahir || null,
+      tglLahir: studentWithRelations.tglLahir || null,
+      namaOrtu: studentWithRelations.namaOrtu || null,
+      nohpOrtu: studentWithRelations.nohpOrtu || null,
+      angkatan: studentWithRelations.angkatan
         ? {
-            id: studentWithRelations.student.angkatan.id,
-            tahun: studentWithRelations.student.angkatan.tahun,
+            id: studentWithRelations.angkatan.id,
+            tahun: studentWithRelations.angkatan.tahun,
           }
         : null,
     };
@@ -640,62 +640,63 @@ const updateStudent = async (req, res) => {
   }
 };
 
-// Delete student
 const deleteStudent = async (req, res) => {
   try {
     const { studentId } = req.params;
 
-    // Check if student exists
-    const existingStudent = await prisma.user.findUnique({
-      where: {
-        id: parseInt(studentId),
-        role: "siswa",
-      },
-      include: {
-        student: true,
-      },
+    // Cari student berdasarkan studentId
+    const existingStudent = await prisma.student.findUnique({
+      where: { id: parseInt(studentId) },
+      include: { user: true },
     });
 
     if (!existingStudent) {
       return res.status(404).json({ error: "Student not found" });
     }
 
-    // Check if student has violations or achievements
-    const [violations, achievements] = await Promise.all([
-      prisma.studentReport.count({
-        where: {
-          studentId: existingStudent.student.id,
-          tipe: "violation",
-        },
-      }),
-      prisma.studentReport.count({
-        where: {
-          studentId: existingStudent.student.id,
-          tipe: "achievement",
-        },
-      }),
-    ]);
+    // Ambil semua studentReport milik student ini
+    const studentReports = await prisma.studentReport.findMany({
+      where: { studentId: existingStudent.id },
+      select: { id: true },
+    });
+    const reportIds = studentReports.map((r) => r.id);
 
-    if (violations > 0 || achievements > 0) {
-      return res.status(400).json({
-        error:
-          "Cannot delete student with existing violations or achievements. Please remove them first.",
+    // Hapus semua evidence (bukti) yang terkait studentReport
+    if (reportIds.length > 0) {
+      await prisma.reportEvidence.deleteMany({
+        where: { reportId: { in: reportIds } },
       });
     }
 
-    // Delete related notifications first
+    // Hapus semua studentReport milik student
+    await prisma.studentReport.deleteMany({
+      where: { studentId: existingStudent.id },
+    });
+
+    // Hapus notifikasi terkait student
     await prisma.notification.deleteMany({
-      where: { studentId: existingStudent.student.id },
+      where: { studentId: existingStudent.id },
     });
 
-    // Delete student record first (due to foreign key constraint)
+    // Hapus scoreHistory, suratPeringatan, pointAdjustment jika ada
+    await prisma.scoreHistory.deleteMany({
+      where: { studentId: existingStudent.id },
+    });
+    await prisma.suratPeringatan.deleteMany({
+      where: { studentId: existingStudent.id },
+    });
+    await prisma.pointAdjustment.deleteMany({
+      where: { studentId: existingStudent.id },
+    });
+
+    // Hapus student record
     await prisma.student.delete({
-      where: { id: existingStudent.student.id },
+      where: { id: existingStudent.id },
     });
 
-    // Delete user record
+    // Hapus user record
     await prisma.user.delete({
-      where: { id: parseInt(studentId) },
+      where: { id: existingStudent.userId },
     });
 
     res.json({
