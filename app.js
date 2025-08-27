@@ -23,6 +23,7 @@ const kategoriRoute = require("./src/routes/master/kategori.route");
 const walikelasRoute = require("./src/routes/walikelas.route");
 const rekapRoute = require("./src/routes/master/rekap.route");
 const automasiRoute = require("./src/routes/automasi.route");
+const penangananRoute = require("./src/routes/master/penanganan.route");
 
 dotenv.config();
 
@@ -56,6 +57,7 @@ app.use("/api/master/violations", violationRoute);
 app.use("/api/master/achievements", achievementRoute);
 app.use("/api/master/reports", reportRoute);
 app.use("/api/master/rekap", rekapRoute);
+app.use("/api/master/penanganan", penangananRoute);
 app.use("/api/tindakan-otomatis", tindakanOtomatisRoute);
 app.use("/api/kenaikan-kelas", kenaikanKelasRoute);
 app.use("/api/import", importRoute);

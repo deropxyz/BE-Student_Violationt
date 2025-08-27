@@ -1,7 +1,6 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
-// Contoh: import siswa dari array JSON di body
 // Untuk import dari file (xlsx/csv), gunakan library seperti 'xlsx' atau 'csv-parse'
 const importStudents = async (req, res) => {
   try {

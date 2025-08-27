@@ -205,7 +205,7 @@ async function previewLaporan(req, res) {
         reporter: { select: { name: true } },
         tahunAjaran: { select: { tahunAjaran: true } },
       },
-      orderBy: { tanggal: "asc" },
+      orderBy: { createdAt: "desc" },
     });
     const data = reports.map((r) => ({
       nisn: r.student?.nisn,
@@ -216,7 +216,10 @@ async function previewLaporan(req, res) {
       tipe: r.item?.tipe,
       kategori: r.item?.kategori?.nama,
       item: r.item?.nama,
-      point: r.pointSaat,
+      point:
+        r.item?.tipe === "pelanggaran" && typeof r.pointSaat === "number"
+          ? -Math.abs(r.pointSaat)
+          : r.pointSaat,
       deskripsi: r.deskripsi,
       reporter: r.reporter?.name,
       tahunAjaran: r.tahunAjaran?.tahunAjaran,
@@ -327,7 +330,10 @@ async function exportLaporan(req, res) {
         tipe: r.item?.tipe,
         kategori: r.item?.kategori?.nama,
         item: r.item?.nama,
-        point: r.pointSaat,
+        point:
+          r.item?.tipe === "pelanggaran" && typeof r.pointSaat === "number"
+            ? -Math.abs(r.pointSaat)
+            : r.pointSaat,
         deskripsi: r.deskripsi,
         reporter: r.reporter?.name,
         tahunAjaran: r.tahunAjaran?.tahunAjaran,

@@ -6,11 +6,14 @@ const {
   createStudentReport,
   updateStudentReport,
   deleteStudentReport,
-  adjustStudentPoints,
-  getPointAdjustmentHistory,
   recalculateAllTotalScores,
-  getAllStudents,
 } = require("../../controllers/Master/report.controller");
+
+const {
+  getAllStudents,
+  getPointAdjustmentHistory,
+  adjustStudentPoints,
+} = require("../../controllers/Master/penanganan.controller");
 
 const {
   authenticate,
