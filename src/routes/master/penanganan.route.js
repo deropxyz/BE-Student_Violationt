@@ -7,13 +7,14 @@ const {
 const {
   authenticate,
   requireRole,
+  isBKOrWalikelas,
 } = require("../../middlewares/auth.middleware");
 
 // Get riwayat penanganan siswa (dengan filter tahun ajaran)
 router.get(
   "/riwayat/:nisn",
   authenticate,
-  requireRole("bk", "superadmin"),
+  isBKOrWalikelas,
   getRiwayatPenangananSiswa
 );
 
@@ -21,7 +22,7 @@ router.get(
 router.get(
   "/riwayat/detail/:id",
   authenticate,
-  requireRole("bk", "superadmin"),
+  isBKOrWalikelas,
   getDetailRiwayatPenanganan
 );
 

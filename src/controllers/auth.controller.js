@@ -45,6 +45,20 @@ const login = async (req, res) => {
       { expiresIn: "1d" }
     );
 
+    // Cek isWaliKelas jika role guru
+    let isWaliKelas = false;
+    if (user.role === "guru" || user.role === "bk") {
+      const teacher = await prisma.teacher.findUnique({
+        where: { userId: user.id },
+      });
+      if (teacher) {
+        const classroom = await prisma.classroom.findFirst({
+          where: { waliKelasId: teacher.id },
+        });
+        if (classroom) isWaliKelas = true;
+      }
+    }
+
     const responseData = {
       token,
       user: {
@@ -52,6 +66,7 @@ const login = async (req, res) => {
         name: user.name,
         role: user.role,
         email: user.email,
+        isWaliKelas,
       },
     };
 

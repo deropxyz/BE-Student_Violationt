@@ -174,10 +174,10 @@ const importPrestasiHandler = async (req, res) => {
     let prestasi = [];
 
     if (req.file) {
-      const workbook = XLSX.readFile(req.file.path);
+      const workbook = xlsx.readFile(req.file.path);
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
-      prestasi = XLSX.utils.sheet_to_json(sheet);
+      prestasi = xlsx.utils.sheet_to_json(sheet);
     } else if (req.body.prestasi) {
       prestasi = req.body.prestasi;
     }
@@ -258,10 +258,10 @@ const importPelanggaran = async (req, res) => {
     let pelanggaran = [];
 
     if (req.file) {
-      const workbook = XLSX.readFile(req.file.path);
+      const workbook = xlsx.readFile(req.file.path);
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
-      pelanggaran = XLSX.utils.sheet_to_json(sheet);
+      pelanggaran = xlsx.utils.sheet_to_json(sheet);
     } else if (req.body.pelanggaran) {
       pelanggaran = req.body.pelanggaran;
     }

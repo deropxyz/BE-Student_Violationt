@@ -18,20 +18,16 @@ const {
 const {
   authenticate,
   requireRole,
+  isBKOrWalikelas,
 } = require("../../middlewares/auth.middleware");
 const upload = require("../../middlewares/upload.middleware");
 
-router.get(
-  "/",
-  authenticate,
-  requireRole("bk", "superadmin", "guru"),
-  getAllStudentReports
-);
+router.get("/", authenticate, isBKOrWalikelas, getAllStudentReports);
 
 router.get(
   "/report/:reportId",
   authenticate,
-  requireRole("bk", "superadmin"),
+  isBKOrWalikelas,
   getStudentReportById
 );
 

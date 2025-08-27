@@ -79,9 +79,39 @@ const isWalikelas = async (req, res, next) => {
   }
 };
 
+const isBKOrWalikelas = async (req, res, next) => {
+  if (req.user.role === "bk" || req.user.role === "superadmin") {
+    return next();
+  }
+  if (req.user.role === "guru") {
+    // cek wali kelas seperti isWalikelas
+    const teacher = await prisma.teacher.findUnique({
+      where: { userId: req.user.id },
+    });
+    if (!teacher) {
+      return res
+        .status(403)
+        .json({ message: "Akses ditolak. Anda bukan wali kelas." });
+    }
+    const classroom = await prisma.classroom.findFirst({
+      where: { waliKelasId: teacher.id },
+    });
+    if (!classroom) {
+      return res
+        .status(403)
+        .json({ message: "Akses ditolak. Anda bukan wali kelas." });
+    }
+    req.teacher = teacher;
+    req.classroomWali = classroom;
+    return next();
+  }
+  return res.status(403).json({ message: "Akses ditolak." });
+};
+
 module.exports = {
   authenticate,
   requireRole,
   isSuperadmin,
   isWalikelas,
+  isBKOrWalikelas,
 };

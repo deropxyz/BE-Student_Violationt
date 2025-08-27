@@ -1,9 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const {
-  getGuruDashboard,
-  getMyClassStudents,
-  getClassStatistics,
+  getDashboardGuru,
+  getProfileGuru,
+  updateProfileGuru,
 } = require("../controllers/guru/dashboard.controller");
 const {
   getMyReports,
@@ -16,15 +16,22 @@ const {
 const {
   createStudentReport,
 } = require("../controllers/Master/report.controller");
+const upload = require("../middlewares/upload.middleware");
+
 const { authenticate } = require("../middlewares/auth.middleware");
 
 // Dashboard routes with authentication
-router.get("/dashboard", authenticate, getGuruDashboard);
-router.get("/my-class-students", authenticate, getMyClassStudents);
-router.get("/class-statistics", authenticate, getClassStatistics);
+router.get("/dashboard", authenticate, getDashboardGuru);
+router.get("/profile", authenticate, getProfileGuru);
+router.put("/profile", authenticate, updateProfileGuru);
 
 // Reporting routes
-router.post("/report-student", authenticate, createStudentReport);
+router.post(
+  "/report-student",
+  authenticate,
+  upload.single("bukti"),
+  createStudentReport
+);
 router.get("/my-reports", authenticate, getMyReports);
 router.get("/report-items", authenticate, getReportItemsStructured);
 router.get("/search-students", authenticate, searchStudents);

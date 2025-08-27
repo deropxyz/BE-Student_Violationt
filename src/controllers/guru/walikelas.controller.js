@@ -2,10 +2,13 @@ const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 
-// Ambil semua siswa di kelas wali kelas yang sedang login
+// Ambil semua siswa di kelas wali kelas yang sedang login (dengan pagination & search)
 const getStudentsInMyClass = async (req, res) => {
   try {
     const userId = req.user.id;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = parseInt(req.query.offset) || 0;
+    const search = req.query.search ? req.query.search.trim() : "";
     // Cari guru dan kelas yang diwalikan
     const teacher = await prisma.teacher.findUnique({
       where: { userId },
@@ -17,15 +20,30 @@ const getStudentsInMyClass = async (req, res) => {
         .json({ error: "Anda tidak menjadi wali kelas manapun" });
     }
     const classroom = teacher.classrooms[0];
-    const students = await prisma.student.findMany({
-      where: { classroomId: classroom.id },
-      include: {
-        user: { select: { name: true, email: true } },
-        angkatan: true,
-      },
-      orderBy: { nisn: "asc" },
-    });
-    res.json({ classroom: classroom.namaKelas, students });
+    // Filter search by nama/nisn
+    const whereClause = {
+      classroomId: classroom.id,
+      ...(search && {
+        OR: [
+          { nisn: { contains: search } },
+          { user: { name: { contains: search, mode: "insensitive" } } },
+        ],
+      }),
+    };
+    const [students, total] = await Promise.all([
+      prisma.student.findMany({
+        where: whereClause,
+        include: {
+          user: { select: { name: true, email: true } },
+          angkatan: true,
+        },
+        orderBy: { nisn: "asc" },
+        skip: offset,
+        take: limit,
+      }),
+      prisma.student.count({ where: whereClause }),
+    ]);
+    res.json({ classroom: classroom.namaKelas, students, total });
   } catch (err) {
     console.error("Error getStudentsInMyClass:", err);
     res.status(500).json({ error: "Gagal mengambil data siswa kelas" });
@@ -65,10 +83,13 @@ const getStudentDetailInMyClass = async (req, res) => {
   }
 };
 
-// Ambil daftar laporan seluruh siswa di kelas wali kelas
+// Ambil daftar laporan seluruh siswa di kelas wali kelas (dengan pagination & search)
 const getReportsInMyClass = async (req, res) => {
   try {
     const userId = req.user.id;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = parseInt(req.query.offset) || 0;
+    const search = req.query.search ? req.query.search.trim() : "";
     // Cari guru dan kelas yang diwalikan
     const teacher = await prisma.teacher.findUnique({
       where: { userId },
@@ -80,17 +101,33 @@ const getReportsInMyClass = async (req, res) => {
         .json({ error: "Anda tidak menjadi wali kelas manapun" });
     }
     const classroom = teacher.classrooms[0];
-    // Ambil semua laporan siswa di kelas ini
-    const reports = await prisma.studentReport.findMany({
-      where: { student: { classroomId: classroom.id } },
-      include: {
-        student: { select: { nisn: true, user: { select: { name: true } } } },
-        item: true,
-        reporter: { select: { name: true, role: true } },
+    // Filter search by nama/nisn
+    const whereClause = {
+      student: {
+        classroomId: classroom.id,
+        ...(search && {
+          OR: [
+            { nisn: { contains: search } },
+            { user: { name: { contains: search, mode: "insensitive" } } },
+          ],
+        }),
       },
-      orderBy: { tanggal: "desc" },
-    });
-    res.json({ classroom: classroom.namaKelas, reports });
+    };
+    const [reports, total] = await Promise.all([
+      prisma.studentReport.findMany({
+        where: whereClause,
+        include: {
+          student: { select: { nisn: true, user: { select: { name: true } } } },
+          item: true,
+          reporter: { select: { name: true, role: true } },
+        },
+        orderBy: { tanggal: "desc" },
+        skip: offset,
+        take: limit,
+      }),
+      prisma.studentReport.count({ where: whereClause }),
+    ]);
+    res.json({ classroom: classroom.namaKelas, reports, total });
   } catch (err) {
     console.error("Error getReportsInMyClass:", err);
     res.status(500).json({ error: "Gagal mengambil daftar laporan kelas" });
