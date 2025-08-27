@@ -7,6 +7,13 @@ const {
   importStudent,
 } = require("../controllers/import.controller");
 
+const {
+  importPrestasiHandler,
+  importPelanggaran,
+} = require("../controllers/superadmin/import.controller");
+
+const { route } = require("./superadmin.route");
+
 const upload = multer({ dest: "uploads/" });
 
 // Import data dari Excel - hanya superadmin
@@ -22,6 +29,23 @@ router.post(
       { ...req, params: { ...req.params, type: "students" } },
       res
     )
+);
+
+// route.js
+router.post(
+  "/prestasi",
+  authenticate,
+  requireRole("superadmin", "bk"),
+  upload.single("file"), // middleware upload di sini
+  importPrestasiHandler
+);
+
+router.post(
+  "/pelanggaran",
+  authenticate,
+  requireRole("superadmin", "bk"),
+  upload.single("file"), // middleware upload di sini
+  importPelanggaran
 );
 
 module.exports = router;

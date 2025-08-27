@@ -1,966 +1,289 @@
 const { PrismaClient } = require("@prisma/client");
-const {
-  validateActiveAcademicYear,
-  getTargetAcademicYear,
-  canCreateReports,
-} = require("../../utils/academicYearUtils");
 const prisma = new PrismaClient();
 
-// Report Student - Create violation or achievement report
-const reportStudent = async (req, res) => {
-  const userId = req.user.id;
-  const {
-    studentId,
-    itemId, // ID dari ReportItem
-    tanggal,
-    waktu,
-    deskripsi,
-    bukti,
-  } = req.body;
-
+// GET /guru/my-reports?userId=xxx&tahunAjaranId=yyy&tipe=pelanggaran|prestasi&bulan=1-12
+// Mengambil semua laporan yang dibuat oleh user tertentu (guru) dengan filter tahun ajaran, tipe, dan bulan
+const getMyReports = async (req, res) => {
   try {
-    // ✅ NEW: Validate active academic year for creating new reports
-    let activeYear;
-    try {
-      activeYear = await validateActiveAcademicYear();
-    } catch (error) {
-      if (error.code === "ACADEMIC_YEAR_REQUIRED") {
-        return res.status(400).json({
-          error: "No active academic year found",
-          message:
-            "Cannot create new reports. Please contact administrator to set active academic year.",
+    const userId = parseInt(req.query.userId);
+    const tahunAjaranId = req.query.tahunAjaranId
+      ? parseInt(req.query.tahunAjaranId)
+      : undefined;
+    const tipe = req.query.tipe;
+    const bulan = req.query.bulan ? parseInt(req.query.bulan) : undefined; // 1-12
+    if (!userId) {
+      return res.status(400).json({ message: "userId wajib diisi" });
+    }
+
+    // Build where clause pakai reporterId (langsung userId)
+    const where = { reporterId: userId };
+    if (tahunAjaranId) where.tahunAjaranId = tahunAjaranId;
+    if (tipe) where.item = { tipe };
+    if (bulan) {
+      // Filter by month (tanggal field)
+      const year = new Date().getFullYear(); // default year if not filtered by tahun ajaran
+      let filterYear = year;
+      if (tahunAjaranId) {
+        const tahunAjaran = await prisma.tahunAjaran.findUnique({
+          where: { id: tahunAjaranId },
         });
+        if (tahunAjaran) filterYear = parseInt(tahunAjaran.tahunMulai) || year;
       }
-      throw error;
+      const startDate = new Date(filterYear, bulan - 1, 1);
+      const endDate = new Date(filterYear, bulan, 1);
+      where.tanggal = { gte: startDate, lt: endDate };
     }
 
-    // Verify teacher exists
-    const teacher = await prisma.teacher.findUnique({
-      where: { userId },
-    });
-
-    if (!teacher) {
-      return res.status(404).json({ error: "Teacher not found" });
-    }
-
-    // Verify student exists
-    const student = await prisma.student.findUnique({
-      where: { id: parseInt(studentId) },
-    });
-
-    if (!student) {
-      return res.status(404).json({ error: "Student not found" });
-    }
-
-    // Check if student is archived (graduated)
-    if (student.isArchived) {
-      return res.status(400).json({
-        error: "Cannot create report for graduated student",
-        message: "This student has graduated and cannot be reported",
-      });
-    }
-
-    // Validate itemId
-    if (!itemId) {
-      return res.status(400).json({ error: "itemId (ReportItem) is required" });
-    }
-    // Get item and point
-    const item = await prisma.reportItem.findUnique({
-      where: { id: parseInt(itemId) },
-    });
-    if (!item) {
-      return res.status(404).json({ error: "Report item not found" });
-    }
-    let pointSaat =
-      item.tipe === "pelanggaran"
-        ? -Math.abs(item.point)
-        : Math.abs(item.point);
-
-    // Validate and process date fields
-    let processedTanggal = new Date();
-    if (tanggal && tanggal.trim() !== "") {
-      const tanggalDate = new Date(tanggal);
-      if (!isNaN(tanggalDate.getTime())) {
-        processedTanggal = tanggalDate;
-      } else {
-        return res.status(400).json({ error: "Invalid date format" });
-      }
-    }
-
-    // Validate and process waktu field
-    let processedWaktu = null;
-    if (waktu && waktu.trim() !== "") {
-      // If waktu is in HH:MM format, combine it with the date
-      if (waktu.includes(":") && waktu.length <= 5) {
-        const [hours, minutes] = waktu.split(":").map(Number);
-        if (
-          !isNaN(hours) &&
-          !isNaN(minutes) &&
-          hours >= 0 &&
-          hours <= 23 &&
-          minutes >= 0 &&
-          minutes <= 59
-        ) {
-          processedWaktu = new Date(processedTanggal);
-          processedWaktu.setHours(hours, minutes, 0, 0);
-        } else {
-          return res
-            .status(400)
-            .json({ error: "Invalid time format. Use HH:MM format." });
-        }
-      } else {
-        // Try to parse as full datetime
-        const waktuDate = new Date(waktu);
-        if (!isNaN(waktuDate.getTime())) {
-          processedWaktu = waktuDate;
-        } else {
-          return res.status(400).json({ error: "Invalid time format" });
-        }
-      }
-    }
-
-    // Create the report
-    console.log(
-      `📝 Creating report - Student: ${studentId}, Type: ${tipe}, PointSaat: ${pointSaat}`
-    );
-    const report = await prisma.studentReport.create({
-      data: {
-        studentId: parseInt(studentId),
-        reporterId: userId,
-        itemId: parseInt(itemId),
-        tahunAjaranId: activeYear.id,
-        tanggal: processedTanggal,
-        waktu: processedWaktu,
-        deskripsi,
-        bukti,
-        pointSaat,
-      },
+    // Ambil semua laporan yang reporterId = userId tsb
+    const reports = await prisma.studentReport.findMany({
+      where,
       include: {
         student: {
           include: {
             user: true,
             classroom: true,
+            angkatan: true,
           },
         },
-        item: true,
-        reporter: {
-          select: {
-            name: true,
-            email: true,
-          },
-        },
-      },
-    });
-
-    // Update student's total score
-    console.log(
-      `📊 Updating student score - Old: ${
-        student.totalScore
-      }, Change: ${pointSaat}, New: ${student.totalScore + pointSaat}`
-    );
-    await prisma.student.update({
-      where: { id: parseInt(studentId) },
-      data: {
-        totalScore: {
-          increment: pointSaat,
-        },
-      },
-    });
-
-    // Create score history record
-    await prisma.scoreHistory.create({
-      data: {
-        studentId: parseInt(studentId),
-        pointLama: student.totalScore,
-        pointBaru: student.totalScore + pointSaat,
-        alasan: item.tipe === "pelanggaran" ? "Pelanggaran" : "Prestasi",
-      },
-    });
-
-    res.status(201).json({
-      message: `${
-        tipe === "violation" ? "Violation" : "Achievement"
-      } report created successfully`,
-      data: report,
-    });
-  } catch (err) {
-    console.error("Error creating student report:", err);
-    res.status(500).json({ error: "Failed to create report" });
-  }
-};
-
-// Get My Reports - All reports created by this teacher
-const getMyReports = async (req, res) => {
-  const userId = req.user.id;
-  const {
-    page = 1,
-    limit = 10,
-    tipe, // filter by "violation" or "achievement"
-    startDate,
-    endDate,
-    studentId,
-  } = req.query;
-
-  try {
-    // Verify teacher exists
-    const teacher = await prisma.teacher.findUnique({
-      where: { userId },
-    });
-
-    if (!teacher) {
-      return res.status(404).json({ error: "Teacher not found" });
-    }
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    // Build where clause
-    const whereClause = {
-      reporterId: userId,
-    };
-
-    if (tipe) {
-      whereClause.item = {
-        tipe: tipe === "violation" ? "pelanggaran" : "prestasi",
-      };
-    }
-
-    if (studentId) {
-      whereClause.studentId = parseInt(studentId);
-    }
-
-    if (startDate || endDate) {
-      whereClause.tanggal = {};
-      if (startDate) {
-        whereClause.tanggal.gte = new Date(startDate);
-      }
-      if (endDate) {
-        whereClause.tanggal.lte = new Date(endDate);
-      }
-    }
-
-    // Get reports with pagination
-    const [reports, total] = await Promise.all([
-      prisma.studentReport.findMany({
-        where: whereClause,
-        include: {
-          student: {
-            include: {
-              user: {
-                select: {
-                  name: true,
-                },
-              },
-              classroom: {
-                select: {
-                  namaKelas: true,
-                },
-              },
-            },
-          },
-          item: {
-            select: {
-              nama: true,
-              tipe: true,
-              kategori: true,
-              point: true,
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: parseInt(limit),
-      }),
-      prisma.studentReport.count({ where: whereClause }),
-    ]);
-
-    // Format the response
-    const formattedReports = reports.map((report) => ({
-      id: report.id,
-      tipe: report.item.tipe,
-      student: {
-        id: report.student.id,
-        nisn: report.student.nisn,
-        name: report.student.user.name,
-        className: report.student.classroom.namaKelas,
-      },
-      item: {
-        id: report.item?.id,
-        nama: report.item?.nama,
-        kategori: report.item?.kategori,
-        point: report.item?.point,
-      },
-      tanggal: report.tanggal,
-      waktu: report.waktu,
-      deskripsi: report.deskripsi,
-      bukti: report.bukti,
-      pointSaat: report.pointSaat,
-      createdAt: report.createdAt,
-    }));
-
-    res.json({
-      data: formattedReports,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        totalPages: Math.ceil(total / parseInt(limit)),
-      },
-      summary: {
-        totalReports: total,
-        violationReports: await prisma.studentReport.count({
-          where: { ...whereClause, item: { tipe: "pelanggaran" } },
-        }),
-        achievementReports: await prisma.studentReport.count({
-          where: { ...whereClause, item: { tipe: "prestasi" } },
-        }),
-      },
-    });
-  } catch (err) {
-    console.error("Error getting my reports:", err);
-    res.status(500).json({ error: "Failed to fetch reports" });
-  }
-};
-
-// Get Teacher Profile
-const getProfile = async (req, res) => {
-  const userId = req.user.id;
-
-  try {
-    const teacher = await prisma.teacher.findUnique({
-      where: { userId },
-      include: {
-        user: {
-          select: {
-            name: true,
-            email: true,
-            role: true,
-            isActive: true,
-            createdAt: true,
-          },
-        },
-        classrooms: {
+        item: {
           include: {
-            students: {
-              select: {
-                id: true,
-                nisn: true,
-                user: {
-                  select: {
-                    name: true,
-                  },
-                },
-              },
-            },
+            kategori: true,
           },
         },
-      },
-    });
-
-    if (!teacher) {
-      return res.status(404).json({ error: "Teacher not found" });
-    }
-
-    // Get teacher statistics
-    const [totalReports, violationReports, achievementReports, recentReports] =
-      await Promise.all([
-        prisma.studentReport.count({
-          where: { reporterId: userId },
-        }),
-        prisma.studentReport.count({
-          where: { reporterId: userId, item: { tipe: "pelanggaran" } },
-        }),
-        prisma.studentReport.count({
-          where: { reporterId: userId, item: { tipe: "prestasi" } },
-        }),
-        prisma.studentReport.findMany({
-          where: { reporterId: userId },
-          include: {
-            student: {
-              include: {
-                user: {
-                  select: {
-                    name: true,
-                  },
-                },
-              },
-            },
-            item: {
-              select: {
-                nama: true,
-                tipe: true,
-              },
-            },
-          },
-          orderBy: { createdAt: "desc" },
-          take: 5,
-        }),
-      ]);
-
-    res.json({
-      profile: {
-        id: teacher.id,
-        nip: teacher.nip,
-        noHp: teacher.noHp,
-        alamat: teacher.alamat,
-        user: teacher.user,
-      },
-      classroom:
-        teacher.classrooms.length > 0
-          ? {
-              id: teacher.classrooms[0].id,
-              namaKelas: teacher.classrooms[0].namaKelas,
-              totalStudents: teacher.classrooms[0].students.length,
-              students: teacher.classrooms[0].students,
-            }
-          : null,
-      statistics: {
-        totalReports,
-        violationReports,
-        achievementReports,
-        reportsThisMonth: await prisma.studentReport.count({
-          where: {
-            reporterId: userId,
-            createdAt: {
-              gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-            },
-          },
-        }),
-      },
-      recentActivity: recentReports.map((report) => ({
-        id: report.id,
-        tipe: report.item?.tipe,
-        studentName: report.student.user.name,
-        itemName: report.item?.nama,
-        tanggal: report.tanggal,
-        createdAt: report.createdAt,
-      })),
-    });
-  } catch (err) {
-    console.error("Error getting teacher profile:", err);
-    res.status(500).json({ error: "Failed to fetch profile" });
-  }
-};
-
-// Update Teacher Profile
-const updateProfile = async (req, res) => {
-  const userId = req.user.id;
-  const { name, email, noHp, alamat } = req.body;
-
-  try {
-    const teacher = await prisma.teacher.findUnique({
-      where: { userId },
-    });
-
-    if (!teacher) {
-      return res.status(404).json({ error: "Teacher not found" });
-    }
-
-    // Update user data and teacher data in a transaction
-    const updatedTeacher = await prisma.$transaction(async (tx) => {
-      // Update user data
-      const updatedUser = await tx.user.update({
-        where: { id: userId },
-        data: {
-          ...(name && { name }),
-          ...(email && { email }),
-        },
-      });
-
-      // Update teacher data
-      const updatedTeacher = await tx.teacher.update({
-        where: { userId },
-        data: {
-          ...(noHp && { noHp }),
-          ...(alamat && { alamat }),
-        },
-        include: {
-          user: {
-            select: {
-              name: true,
-              email: true,
-              role: true,
-            },
-          },
-        },
-      });
-
-      return updatedTeacher;
-    });
-
-    res.json({
-      message: "Profile updated successfully",
-      data: {
-        id: updatedTeacher.id,
-        nip: updatedTeacher.nip,
-        noHp: updatedTeacher.noHp,
-        alamat: updatedTeacher.alamat,
-        user: updatedTeacher.user,
-      },
-    });
-  } catch (err) {
-    console.error("Error updating teacher profile:", err);
-    if (err.code === "P2002") {
-      return res.status(400).json({ error: "Email already exists" });
-    }
-    res.status(500).json({ error: "Failed to update profile" });
-  }
-};
-
-// Get Available Violations for Reporting
-const getViolations = async (req, res) => {
-  try {
-    const violations = await prisma.reportItem.findMany({
-      where: { isActive: true, tipe: "pelanggaran" },
-      orderBy: [{ kategori: { nama: "asc" } }, { point: "desc" }],
-      include: { kategori: true },
-    });
-
-    // Group by category
-    const groupedViolations = violations.reduce((acc, violation) => {
-      const kategoriNama = violation.kategori?.nama || "Tanpa Kategori";
-      if (!acc[kategoriNama]) {
-        acc[kategoriNama] = [];
-      }
-      acc[kategoriNama].push(violation);
-      return acc;
-    }, {});
-
-    res.json({
-      violations,
-      groupedByCategory: groupedViolations,
-    });
-  } catch (err) {
-    console.error("Error getting violations:", err);
-    res.status(500).json({ error: "Failed to fetch violations" });
-  }
-};
-
-// Get Available Achievements for Reporting
-const getAchievements = async (req, res) => {
-  try {
-    const achievements = await prisma.reportItem.findMany({
-      where: { isActive: true, tipe: "prestasi" },
-      orderBy: [{ kategori: { nama: "asc" } }, { point: "desc" }],
-      include: { kategori: true },
-    });
-
-    // Group by category
-    const groupedAchievements = achievements.reduce((acc, achievement) => {
-      const kategoriNama = achievement.kategori?.nama || "Tanpa Kategori";
-      if (!acc[kategoriNama]) {
-        acc[kategoriNama] = [];
-      }
-      acc[kategoriNama].push(achievement);
-      return acc;
-    }, {});
-
-    res.json({
-      achievements,
-      groupedByCategory: groupedAchievements,
-    });
-  } catch (err) {
-    console.error("Error getting achievements:", err);
-    res.status(500).json({ error: "Failed to fetch achievements" });
-  }
-};
-
-// Search Students for Reporting
-const searchStudents = async (req, res) => {
-  const { query = "", classroomId, page = 1, limit = 10 } = req.query;
-
-  try {
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const whereClause = {
-      isArchived: false,
-      OR: [
-        { nisn: { contains: query, mode: "insensitive" } },
-        { user: { name: { contains: query, mode: "insensitive" } } },
-      ],
-    };
-
-    if (classroomId) {
-      whereClause.classroomId = parseInt(classroomId);
-    }
-
-    const [students, total] = await Promise.all([
-      prisma.student.findMany({
-        where: whereClause,
-        include: {
-          user: {
-            select: {
-              name: true,
-            },
-          },
-          classroom: {
-            select: {
-              namaKelas: true,
-            },
-          },
-          angkatan: {
-            select: {
-              tahun: true,
-            },
-          },
-        },
-        orderBy: [
-          { classroom: { namaKelas: "asc" } },
-          { user: { name: "asc" } },
-        ],
-        skip,
-        take: parseInt(limit),
-      }),
-      prisma.student.count({ where: whereClause }),
-    ]);
-
-    res.json({
-      data: students.map((student) => ({
-        id: student.id,
-        nisn: student.nisn,
-        name: student.user.name,
-        className: student.classroom.namaKelas,
-        angkatan: student.angkatan.tahun,
-        totalScore: student.totalScore,
-      })),
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        totalPages: Math.ceil(total / parseInt(limit)),
-      },
-    });
-  } catch (err) {
-    console.error("Error searching students:", err);
-    res.status(500).json({ error: "Failed to search students" });
-  }
-};
-
-// Get Current Academic Year
-const getCurrentAcademicYear = async (req, res) => {
-  try {
-    const currentYear = await prisma.tahunAjaran.findFirst({
-      where: {
-        isActive: true,
+        tahunAjaran: true,
       },
       orderBy: { createdAt: "desc" },
     });
 
-    if (!currentYear) {
-      return res.status(404).json({
-        error: "No active academic year found",
-      });
-    }
-
-    res.json({
-      message: "Current academic year retrieved successfully",
-      data: currentYear,
-    });
-  } catch (err) {
-    console.error("Error getting current academic year:", err);
-    res.status(500).json({ error: "Failed to fetch current academic year" });
-  }
-};
-
-// Get All Academic Years
-const getAcademicYears = async (req, res) => {
-  try {
-    const academicYears = await prisma.tahunAjaran.findMany({
-      orderBy: { tahunMulai: "desc" },
-    });
-
-    res.json({
-      message: "Academic years retrieved successfully",
-      data: academicYears,
-    });
-  } catch (err) {
-    console.error("Error getting academic years:", err);
-    res.status(500).json({ error: "Failed to fetch academic years" });
-  }
-};
-
-// Filter reports by academic year
-const getMyReportsByAcademicYear = async (req, res) => {
-  const userId = req.user.id;
-  const { tahunAjaranId, page = 1, limit = 10, tipe, studentId } = req.query;
-
-  try {
-    // Verify teacher exists
-    const teacher = await prisma.teacher.findUnique({
-      where: { userId },
-    });
-
-    if (!teacher) {
-      return res.status(404).json({ error: "Teacher not found" });
-    }
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    // Build where clause with academic year filter
-    const whereClause = {
-      reporterId: userId,
-    };
-
-    if (tipe) {
-      whereClause.item = {
-        tipe: tipe === "violation" ? "pelanggaran" : "prestasi",
-      };
-    }
-
-    if (studentId) {
-      whereClause.studentId = parseInt(studentId);
-    }
-
-    // Filter by academic year if provided
-    if (tahunAjaranId) {
-      const academicYear = await prisma.tahunAjaran.findUnique({
-        where: { id: parseInt(tahunAjaranId) },
-      });
-
-      if (!academicYear) {
-        return res.status(404).json({ error: "Academic year not found" });
-      }
-
-      whereClause.tanggal = {
-        gte: academicYear.tanggalMulai,
-        lte: academicYear.tanggalSelesai,
-      };
-    }
-
-    // Get reports with pagination
-    const [reports, total] = await Promise.all([
-      prisma.studentReport.findMany({
-        where: whereClause,
-        include: {
-          student: {
-            include: {
-              user: {
-                select: {
-                  name: true,
-                },
-              },
-              classroom: {
-                select: {
-                  namaKelas: true,
-                },
-              },
-              angkatan: {
-                select: {
-                  tahun: true,
-                },
-              },
-            },
-          },
-          item: {
-            select: {
-              id: true,
-              nama: true,
-              kategori: true,
-              point: true,
-              tipe: true,
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: parseInt(limit),
-      }),
-      prisma.studentReport.count({ where: whereClause }),
-    ]);
-
-    // Get academic year info if filtering by specific year
-    let academicYearInfo = null;
-    if (tahunAjaranId) {
-      academicYearInfo = await prisma.tahunAjaran.findUnique({
-        where: { id: parseInt(tahunAjaranId) },
-      });
-    }
-
-    // Format the response
-    const formattedReports = reports.map((report) => ({
-      id: report.id,
-      tipe: report.item?.tipe,
-      student: {
-        id: report.student.id,
-        nisn: report.student.nisn,
-        name: report.student.user.name,
-        className: report.student.classroom.namaKelas,
-        angkatan: report.student.angkatan.tahun,
-      },
-      item: {
-        id: report.item?.id,
-        nama: report.item?.nama,
-        kategori: report.item?.kategori,
-        point: report.item?.point,
-      },
-      tanggal: report.tanggal,
-      waktu: report.waktu,
-      deskripsi: report.deskripsi,
-      bukti: report.bukti,
-      pointSaat: report.pointSaat,
-      createdAt: report.createdAt,
+    // Map agar response hanya field yang dibutuhkan
+    const mapped = reports.map((r) => ({
+      id: r.id,
+      studentId: r.studentId,
+      reporterId: r.reporterId,
+      tanggal: r.tanggal,
+      deskripsi: r.deskripsi,
+      pointSaat: r.pointSaat,
+      namaSiswa: r.student?.user?.name || "-",
+      kategori: r.item?.kategori?.nama || "-",
+      itemNama: r.item?.nama || "-",
+      tipe: r.item?.tipe || "-",
+      tahunAjaran: r.tahunAjaran?.tahunAjaran || "-",
+      bukti: r.bukti,
+      classAtTime: r.classAtTime || "-",
     }));
 
-    res.json({
-      data: formattedReports,
-      academicYear: academicYearInfo,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        totalPages: Math.ceil(total / parseInt(limit)),
-      },
-      summary: {
-        totalReports: total,
-        violationReports: await prisma.studentReport.count({
-          where: { ...whereClause, item: { tipe: "pelanggaran" } },
-        }),
-        achievementReports: await prisma.studentReport.count({
-          where: { ...whereClause, item: { tipe: "prestasi" } },
-        }),
-      },
-    });
+    res.json({ success: true, data: mapped });
   } catch (err) {
-    console.error("Error getting reports by academic year:", err);
-    res.status(500).json({ error: "Failed to fetch reports" });
+    console.error(err);
+    res.status(500).json({ message: "Terjadi kesalahan server" });
   }
 };
-
-// Get Academic Year Statistics for Teacher
-const getAcademicYearStats = async (req, res) => {
-  const userId = req.user.id;
-  const { tahunAjaranId } = req.query;
-
+// GET /guru/report-detail/:id
+// Mengambil detail laporan siswa berdasarkan id, termasuk bukti, nama siswa, kategori, item, dll
+const getReportDetail = async (req, res) => {
   try {
-    // Verify teacher exists
-    const teacher = await prisma.teacher.findUnique({
-      where: { userId },
+    const id = parseInt(req.params.id);
+    if (!id) {
+      return res.status(400).json({ message: "id wajib diisi" });
+    }
+    const report = await prisma.studentReport.findUnique({
+      where: { id },
+      include: {
+        student: {
+          include: {
+            user: true,
+            classroom: true,
+            angkatan: true,
+          },
+        },
+        item: {
+          include: {
+            kategori: true,
+          },
+        },
+        tahunAjaran: true,
+      },
     });
-
-    if (!teacher) {
-      return res.status(404).json({ error: "Teacher not found" });
+    if (!report) {
+      return res.status(404).json({ message: "Laporan tidak ditemukan" });
     }
-
-    let academicYear;
-    if (tahunAjaranId) {
-      academicYear = await prisma.tahunAjaran.findUnique({
-        where: { id: parseInt(tahunAjaranId) },
-      });
-    } else {
-      // Get current active academic year
-      academicYear = await prisma.tahunAjaran.findFirst({
-        where: { isActive: true },
-      });
-    }
-
-    if (!academicYear) {
-      return res.status(404).json({ error: "Academic year not found" });
-    }
-
-    // Build date filter for the academic year
-    const dateFilter = {
-      gte: academicYear.tanggalMulai,
-      lte: academicYear.tanggalSelesai,
-    };
-
-    // Get statistics for this academic year
-    const [totalReports, violationReports, achievementReports, monthlyStats] =
-      await Promise.all([
-        // Total reports in this academic year
-        prisma.studentReport.count({
-          where: {
-            reporterId: userId,
-            tanggal: dateFilter,
-          },
-        }),
-
-        // Violation reports in this academic year
-        prisma.studentReport.count({
-          where: {
-            reporterId: userId,
-            item: { tipe: "pelanggaran" },
-            tanggal: dateFilter,
-          },
-        }),
-
-        // Achievement reports in this academic year
-        prisma.studentReport.count({
-          where: {
-            reporterId: userId,
-            item: { tipe: "prestasi" },
-            tanggal: dateFilter,
-          },
-        }),
-
-        // Monthly breakdown
-        prisma.studentReport.findMany({
-          where: {
-            reporterId: userId,
-            tanggal: dateFilter,
-          },
-          select: {
-            item: { select: { tipe: true } },
-            tanggal: true,
-            pointSaat: true,
-          },
-        }),
-      ]);
-
-    // Process monthly statistics
-    const monthlyBreakdown = {};
-    monthlyStats.forEach((report) => {
-      const month = new Date(report.tanggal).toISOString().slice(0, 7); // YYYY-MM format
-
-      if (!monthlyBreakdown[month]) {
-        monthlyBreakdown[month] = {
-          month,
-          violations: 0,
-          achievements: 0,
-          totalPoints: 0,
-        };
-      }
-
-      if (report.item?.tipe === "pelanggaran") {
-        monthlyBreakdown[month].violations++;
-      } else if (report.item?.tipe === "prestasi") {
-        monthlyBreakdown[month].achievements++;
-      }
-
-      monthlyBreakdown[month].totalPoints += report.pointSaat || 0;
-    });
-
+    // Format response hanya field penting
     res.json({
-      academicYear: {
-        id: academicYear.id,
-        tahunAjaran: academicYear.tahunAjaran,
-        tahunMulai: academicYear.tahunMulai,
-        tahunSelesai: academicYear.tahunSelesai,
-        isActive: academicYear.isActive,
+      success: true,
+      data: {
+        id: report.id,
+        studentId: report.studentId,
+        reporterId: report.reporterId,
+        tanggal: report.tanggal,
+        waktu: report.waktu,
+        deskripsi: report.deskripsi,
+        pointSaat: report.pointSaat,
+        namaSiswa: report.student?.user?.name || "-",
+        nisn: report.student?.nisn || "-",
+        classAtTime:
+          report.classAtTime || report.student?.classroom?.namaKelas || "-",
+        kategori: report.item?.kategori?.nama || "-",
+        itemNama: report.item?.nama || "-",
+        tipe: report.item?.tipe || "-",
+        tahunAjaran: report.tahunAjaran?.tahunAjaran || "-",
+        bukti: report.bukti,
+        createdAt: report.createdAt,
+        updatedAt: report.updatedAt,
       },
-      statistics: {
-        totalReports,
-        violationReports,
-        achievementReports,
-        averageReportsPerMonth: totalReports / 12,
-      },
-      monthlyBreakdown: Object.values(monthlyBreakdown).sort((a, b) =>
-        a.month.localeCompare(b.month)
-      ),
     });
   } catch (err) {
-    console.error("Error getting academic year statistics:", err);
-    res.status(500).json({ error: "Failed to fetch academic year statistics" });
+    console.error(err);
+    res.status(500).json({ message: "Terjadi kesalahan server" });
+  }
+};
+// GET /guru/search-students?query=xxx
+// Search siswa by nama atau nisn (untuk autocomplete form laporan)
+const searchStudents = async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query || query.length < 2) {
+      return res.json({ success: true, data: [] });
+    }
+    const students = await prisma.student.findMany({
+      where: {
+        isArchived: false,
+        OR: [
+          { nisn: { contains: query, mode: "insensitive" } },
+          { user: { name: { contains: query, mode: "insensitive" } } },
+        ],
+      },
+      select: {
+        id: true,
+        nisn: true,
+        user: { select: { name: true } },
+        classroom: { select: { kodeKelas: true, namaKelas: true } },
+      },
+      orderBy: { nisn: "asc" },
+      take: 20,
+    });
+    const data = students.map((s) => ({
+      id: s.id,
+      nisn: s.nisn,
+      name: s.user?.name || "",
+      kodeKelas: s.classroom?.kodeKelas || "-",
+      namaKelas: s.classroom?.namaKelas || "-",
+    }));
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Gagal mencari siswa" });
   }
 };
 
+// GET /guru/categories
+// Ambil data kategori
+const getCategories = async (req, res) => {
+  try {
+    const categories = await prisma.kategori.findMany({
+      select: {
+        id: true,
+        nama: true,
+        tipe: true,
+      },
+      orderBy: { nama: "asc" },
+    });
+    res.json({ success: true, data: categories });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Gagal mengambil data kategori" });
+  }
+};
+// GET /guru/report-items
+// Ambil data pelanggaran & prestasi: tipe -> kategori -> item
+const getReportItemsStructured = async (req, res) => {
+  try {
+    // Ambil semua kategori beserta items-nya, group by tipe
+    const categories = await prisma.kategori.findMany({
+      include: {
+        items: {
+          where: { isActive: true },
+          select: { id: true, nama: true, point: true, tipe: true },
+          orderBy: { nama: "asc" },
+        },
+      },
+      orderBy: { nama: "asc" },
+    });
+
+    // Group by tipe
+    const result = {};
+    for (const cat of categories) {
+      if (!result[cat.tipe]) result[cat.tipe] = [];
+      result[cat.tipe].push({
+        kategoriId: cat.id,
+        kategoriNama: cat.nama,
+        items: cat.items.map((i) => ({
+          id: i.id,
+          nama: i.nama,
+          point: i.point,
+        })),
+      });
+    }
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Gagal mengambil data report items" });
+  }
+};
+
+// Struktur controller ini siap dikembangkan untuk endpoint guru lainnya
+// GET /guru/search-report-items?query=xxx&type=pelanggaran|prestasi
+// Search report item by nama item atau kategori, untuk autocomplete
+const searchReportItems = async (req, res) => {
+  try {
+    const { query, type } = req.query;
+    if (!query || query.length < 2) {
+      return res.json({ success: true, data: [] });
+    }
+    const where = {
+      isActive: true,
+      OR: [
+        { nama: { contains: query, mode: "insensitive" } },
+        { kategori: { nama: { contains: query, mode: "insensitive" } } },
+      ],
+    };
+    if (type === "pelanggaran" || type === "prestasi") {
+      where.tipe = type;
+    }
+    const items = await prisma.reportItem.findMany({
+      where,
+      select: {
+        id: true,
+        nama: true,
+        point: true,
+        tipe: true,
+        kategori: { select: { nama: true } },
+      },
+      orderBy: { nama: "asc" },
+      take: 20,
+    });
+    // Format: Bentuk Pelanggaran (Kategori) Poin
+    const data = items.map((i) => ({
+      id: i.id,
+      nama: i.nama,
+      kategori: i.kategori?.nama || "-",
+      tipe: i.tipe,
+      point: i.point,
+      label: `${i.nama} (${i.kategori?.nama || "-"}) ${
+        i.tipe === "pelanggaran" ? "-" : "+"
+      }${i.point} poin`,
+    }));
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Gagal mencari report item" });
+  }
+};
 module.exports = {
   getMyReports,
-  getProfile,
-  updateProfile,
-  getViolations,
-  getAchievements,
+  getCategories,
+  getReportItemsStructured,
   searchStudents,
-  getCurrentAcademicYear,
-  getAcademicYears,
-  getMyReportsByAcademicYear,
-  getAcademicYearStats,
+  searchReportItems,
+  getReportDetail,
 };

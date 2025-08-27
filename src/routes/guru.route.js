@@ -7,15 +7,11 @@ const {
 } = require("../controllers/guru/dashboard.controller");
 const {
   getMyReports,
-  getProfile,
-  updateProfile,
-  getViolations,
-  getAchievements,
+  getCategories,
+  getReportItemsStructured,
   searchStudents,
-  getCurrentAcademicYear,
-  getAcademicYears,
-  getMyReportsByAcademicYear,
-  getAcademicYearStats,
+  searchReportItems,
+  getReportDetail,
 } = require("../controllers/guru/teacher.controller");
 const {
   createStudentReport,
@@ -30,26 +26,10 @@ router.get("/class-statistics", authenticate, getClassStatistics);
 // Reporting routes
 router.post("/report-student", authenticate, createStudentReport);
 router.get("/my-reports", authenticate, getMyReports);
-
-// Academic Year specific routes
-router.get(
-  "/reports-by-academic-year",
-  authenticate,
-  getMyReportsByAcademicYear
-);
-router.get("/academic-year-stats", authenticate, getAcademicYearStats);
-
-// Profile routes
-router.get("/profile", authenticate, getProfile);
-router.put("/profile", authenticate, updateProfile);
-
-// Data for reporting
-router.get("/violations", authenticate, getViolations);
-router.get("/achievements", authenticate, getAchievements);
+router.get("/report-items", authenticate, getReportItemsStructured);
 router.get("/search-students", authenticate, searchStudents);
-
-// Academic Year routes
-router.get("/academic-years", authenticate, getAcademicYears);
-router.get("/current-academic-year", authenticate, getCurrentAcademicYear);
+router.get("/categories", authenticate, getCategories);
+router.get("/search-report-items", authenticate, searchReportItems);
+router.get("/report-detail/:id", authenticate, getReportDetail);
 
 module.exports = router;

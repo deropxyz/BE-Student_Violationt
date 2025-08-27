@@ -1,6 +1,9 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
+const multer = require("multer");
+const xlsx = require("xlsx"); // kalau pakai excel
+
 // Untuk import dari file (xlsx/csv), gunakan library seperti 'xlsx' atau 'csv-parse'
 const importStudents = async (req, res) => {
   try {
@@ -166,10 +169,104 @@ const importTeachers = async (req, res) => {
   }
 };
 
-const importViolations = async (req, res) => {
+const importPrestasiHandler = async (req, res) => {
   try {
-    const { violations } = req.body; // violations: array of pelanggaran
-    if (!Array.isArray(violations) || violations.length === 0) {
+    let prestasi = [];
+
+    if (req.file) {
+      const workbook = XLSX.readFile(req.file.path);
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      prestasi = XLSX.utils.sheet_to_json(sheet);
+    } else if (req.body.prestasi) {
+      prestasi = req.body.prestasi;
+    }
+
+    if (!Array.isArray(prestasi) || prestasi.length === 0) {
+      return res
+        .status(400)
+        .json({ error: "Data prestasi kosong atau tidak valid" });
+    }
+
+    let successCount = 0;
+    let failed = [];
+
+    for (const p of prestasi) {
+      try {
+        if (!p.nama || !p.kategoriNama || p.point === undefined) {
+          failed.push({
+            nama: p.nama,
+            reason: "Nama/kategori/point wajib diisi (kategoriNama)",
+          });
+          continue;
+        }
+
+        const kategori = await prisma.kategori.findFirst({
+          where: { nama: p.kategoriNama, tipe: "prestasi" },
+        });
+        if (!kategori) {
+          failed.push({
+            nama: p.nama,
+            reason: `Kategori '${p.kategoriNama}' tidak ditemukan`,
+          });
+          continue;
+        }
+
+        const point = parseInt(p.point);
+        if (isNaN(point)) {
+          failed.push({ nama: p.nama, reason: "Point harus berupa angka" });
+          continue;
+        }
+
+        const exist = await prisma.reportItem.findFirst({
+          where: { nama: p.nama, kategoriId: kategori.id, tipe: "prestasi" },
+        });
+        if (exist) {
+          failed.push({
+            nama: p.nama,
+            reason: "Nama prestasi sudah ada di kategori ini",
+          });
+          continue;
+        }
+
+        await prisma.reportItem.create({
+          data: {
+            nama: p.nama,
+            tipe: "prestasi",
+            kategoriId: kategori.id,
+            jenis: p.jenis || null,
+            point: point,
+            isActive: p.isActive !== undefined ? !!p.isActive : true,
+          },
+        });
+
+        successCount++;
+      } catch (err) {
+        failed.push({ nama: p.nama, reason: err.message });
+      }
+    }
+
+    res.json({ success: failed.length === 0, imported: successCount, failed });
+  } catch (err) {
+    console.error("Error importing prestasi:", err);
+    res.status(500).json({ error: "Gagal import data prestasi" });
+  }
+};
+
+const importPelanggaran = async (req, res) => {
+  try {
+    let pelanggaran = [];
+
+    if (req.file) {
+      const workbook = XLSX.readFile(req.file.path);
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      pelanggaran = XLSX.utils.sheet_to_json(sheet);
+    } else if (req.body.pelanggaran) {
+      pelanggaran = req.body.pelanggaran;
+    }
+
+    if (!Array.isArray(pelanggaran) || pelanggaran.length === 0) {
       return res
         .status(400)
         .json({ error: "Data pelanggaran kosong atau tidak valid" });
@@ -178,67 +275,71 @@ const importViolations = async (req, res) => {
     let successCount = 0;
     let failed = [];
 
-    for (const v of violations) {
+    for (const p of pelanggaran) {
       try {
-        // Validasi minimal
-        if (!v.nama || !v.kategoriNama || v.point === undefined) {
+        if (!p.nama || !p.kategoriNama || p.point === undefined) {
           failed.push({
-            nama: v.nama,
+            nama: p.nama,
             reason: "Nama/kategori/point wajib diisi (kategoriNama)",
           });
           continue;
         }
-        // Cari kategori berdasarkan nama
+
         const kategori = await prisma.kategori.findFirst({
-          where: { nama: v.kategoriNama, tipe: "pelanggaran" },
+          where: { nama: p.kategoriNama, tipe: "pelanggaran" },
         });
         if (!kategori) {
           failed.push({
-            nama: v.nama,
-            reason: `Kategori dengan nama '${v.kategoriNama}' tidak ditemukan`,
+            nama: p.nama,
+            reason: `Kategori '${p.kategoriNama}' tidak ditemukan`,
           });
           continue;
         }
-        // Cek nama sudah ada di kategori yang sama
+
+        const point = parseInt(p.point);
+        if (isNaN(point)) {
+          failed.push({ nama: p.nama, reason: "Point harus berupa angka" });
+          continue;
+        }
+
         const exist = await prisma.reportItem.findFirst({
-          where: {
-            nama: v.nama,
-            kategoriId: kategori.id,
-            tipe: "pelanggaran",
-          },
+          where: { nama: p.nama, kategoriId: kategori.id, tipe: "pelanggaran" },
         });
         if (exist) {
           failed.push({
-            nama: v.nama,
+            nama: p.nama,
             reason: "Nama pelanggaran sudah ada di kategori ini",
           });
           continue;
         }
-        // Buat report item (pelanggaran)
+
         await prisma.reportItem.create({
           data: {
-            nama: v.nama,
+            nama: p.nama,
             tipe: "pelanggaran",
             kategoriId: kategori.id,
-            jenis: v.jenis || null,
-            point: parseInt(v.point),
-            isActive: v.isActive !== undefined ? !!v.isActive : true,
+            jenis: p.jenis || null,
+            point: point,
+            isActive: p.isActive !== undefined ? !!p.isActive : true,
           },
         });
+
         successCount++;
       } catch (err) {
-        failed.push({ nama: v.nama, reason: err.message });
+        failed.push({ nama: p.nama, reason: err.message });
       }
     }
-    res.json({
-      success: true,
-      imported: successCount,
-      failed,
-    });
+
+    res.json({ success: failed.length === 0, imported: successCount, failed });
   } catch (err) {
-    console.error("Error importing violations:", err);
+    console.error("Error importing pelanggaran:", err);
     res.status(500).json({ error: "Gagal import data pelanggaran" });
   }
 };
 
-module.exports = { importStudents, importTeachers, importViolations };
+module.exports = {
+  importStudents,
+  importTeachers,
+  importPrestasiHandler,
+  importPelanggaran,
+};

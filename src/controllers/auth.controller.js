@@ -24,9 +24,6 @@ const login = async (req, res) => {
           user: true,
           classroom: true,
           angkatan: true,
-          orangTua: {
-            include: { user: true },
-          },
         },
       });
       if (!student)

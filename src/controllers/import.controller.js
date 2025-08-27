@@ -16,7 +16,7 @@ const importFromExcel = async (req, res) => {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(sheet);
 
-    const defaultPassword = "smkn14@garut";
+    const defaultPassword = process.env.DEFAULT_PASSWORD;
     const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
     let imported = 0;
