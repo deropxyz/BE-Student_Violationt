@@ -1,4 +1,5 @@
 const express = require("express");
+require("./automasi-cron"); // Aktifkan cron surat peringatan otomatis
 const dotenv = require("dotenv");
 const cors = require("cors");
 const studentManagementRoute = require("./src/routes/superadmin/studentManagement.route");

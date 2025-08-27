@@ -51,10 +51,16 @@ const checkAndTriggerSuratPeringatan = async (
   oldTotalScore = null
 ) => {
   try {
+    // Ambil tahun ajaran aktif
+    const activeYear = await prisma.tahunAjaran.findFirst({
+      where: { isActive: true },
+    });
+    if (!activeYear) return;
+
     // Ambil konfigurasi automasi yang aktif
     const configs = await prisma.automasiConfig.findMany({
       where: { isActive: true },
-      orderBy: { threshold: "desc" }, // Urutkan dari threshold tertinggi ke terendah
+      orderBy: { threshold: "desc" },
     });
 
     // Cek apakah score melewati threshold tertentu
@@ -64,17 +70,23 @@ const checkAndTriggerSuratPeringatan = async (
         (oldTotalScore === null || oldTotalScore > config.threshold);
 
       if (melewatiThreshold) {
-        // Cek apakah surat jenis ini sudah pernah dikirim untuk threshold ini
+        // Cek apakah surat jenis ini sudah pernah dikirim untuk threshold ini di tahun ajaran aktif
         const existingSurat = await prisma.suratPeringatan.findFirst({
           where: {
             studentId: parseInt(studentId),
             jenisSurat: config.jenisSurat,
+            tahunAjaranId: activeYear.id,
             totalScoreSaat: { lte: config.threshold },
           },
         });
 
         if (!existingSurat) {
-          await createSuratPeringatan(studentId, config, newTotalScore);
+          await createSuratPeringatan(
+            studentId,
+            config,
+            newTotalScore,
+            activeYear.id
+          );
         }
       }
     }
@@ -84,7 +96,12 @@ const checkAndTriggerSuratPeringatan = async (
 };
 
 // Fungsi untuk membuat surat peringatan
-const createSuratPeringatan = async (studentId, config, totalScore) => {
+const createSuratPeringatan = async (
+  studentId,
+  config,
+  totalScore,
+  tahunAjaranId
+) => {
   try {
     // Ambil data siswa lengkap
     const student = await prisma.student.findUnique({
@@ -92,11 +109,6 @@ const createSuratPeringatan = async (studentId, config, totalScore) => {
       include: {
         user: { select: { name: true, email: true } },
         classroom: { select: { namaKelas: true } },
-        orangTua: {
-          include: {
-            user: { select: { name: true, email: true } },
-          },
-        },
       },
     });
 
@@ -107,8 +119,15 @@ const createSuratPeringatan = async (studentId, config, totalScore) => {
 
     // Tentukan email dan nomor HP yang akan dikirim
     let emailSiswa = student.user.email;
-    let emailOrtu = student.orangTua?.user?.email;
-    let nomorHpOrtu = student.orangTua?.noHp;
+    // Ambil nomor HP ortu jika ada
+    let nomorHpOrtu = null;
+    if (
+      student.orangTua &&
+      student.orangTua.user &&
+      student.orangTua.user.nomorHp
+    ) {
+      nomorHpOrtu = student.orangTua.user.nomorHp;
+    }
 
     // Buat record surat peringatan
     const suratPeringatan = await prisma.suratPeringatan.create({
@@ -117,10 +136,10 @@ const createSuratPeringatan = async (studentId, config, totalScore) => {
         jenisSurat: config.jenisSurat,
         tingkatSurat: config.tingkat,
         totalScoreSaat: totalScore,
+        tahunAjaranId,
         judul: config.judulTemplate.replace("{NAMA_SISWA}", student.user.name),
         isiSurat,
         emailSiswa,
-        emailOrtu,
         nomorHpOrtu,
         statusKirim: "pending",
       },
@@ -231,6 +250,7 @@ const getHistorySuratPeringatan = async (req, res) => {
       nisn,
       jenisSurat,
       statusKirim,
+      tahunAjaranId,
     } = req.query;
     const skip = (page - 1) * limit;
 
@@ -248,6 +268,9 @@ const getHistorySuratPeringatan = async (req, res) => {
 
     if (jenisSurat) where.jenisSurat = jenisSurat;
     if (statusKirim) where.statusKirim = statusKirim;
+    if (tahunAjaranId && tahunAjaranId !== "all") {
+      where.tahunAjaranId = parseInt(tahunAjaranId);
+    }
 
     const [suratList, total] = await Promise.all([
       prisma.suratPeringatan.findMany({
@@ -310,11 +333,6 @@ const getDetailSuratPeringatan = async (req, res) => {
           include: {
             user: { select: { name: true, email: true } },
             classroom: { select: { namaKelas: true } },
-            orangTua: {
-              include: {
-                user: { select: { name: true, email: true } },
-              },
-            },
           },
         },
       },

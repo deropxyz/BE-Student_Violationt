@@ -1,6 +1,98 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
+// Get detail point adjustment by id
+const getPointAdjustmentDetail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const adj = await prisma.pointAdjustment.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        student: {
+          include: {
+            user: { select: { name: true } },
+            classroom: { select: { kodeKelas: true } },
+          },
+        },
+        teacher: { select: { name: true } },
+      },
+    });
+    if (!adj) return res.status(404).json({ error: "Adjustment not found" });
+    res.json({
+      id: adj.id,
+      student: {
+        id: adj.student.userId,
+        nisn: adj.student.nisn,
+        name: adj.student.user.name,
+        classroom: adj.student.classroom?.kodeKelas || null,
+      },
+      teacher: { name: adj.teacher.name },
+      pointPengurangan: adj.pointPengurangan,
+      alasan: adj.alasan,
+      keterangan: adj.keterangan,
+      pointSebelum: adj.pointSebelum,
+      pointSesudah: adj.pointSesudah,
+      tanggal: adj.tanggal,
+      createdAt: adj.createdAt,
+      updatedAt: adj.updatedAt,
+      bukti: adj.bukti,
+    });
+  } catch (err) {
+    console.error("Error get adjustment detail:", err);
+    res.status(500).json({ error: "Failed to fetch adjustment detail" });
+  }
+};
+
+// Update point adjustment (only alasan, keterangan, bukti)
+const updatePointAdjustment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { alasan, keterangan } = req.body;
+    let buktiPath = undefined;
+    if (req.file) {
+      buktiPath = `/uploads/bukti/${req.file.filename}`;
+    }
+    // Only allow update alasan, keterangan, bukti
+    const dataToUpdate = {
+      ...(alasan && { alasan }),
+      ...(keterangan && { keterangan }),
+      ...(buktiPath && { bukti: buktiPath }),
+    };
+    const updated = await prisma.pointAdjustment.update({
+      where: { id: parseInt(id) },
+      data: dataToUpdate,
+      include: {
+        teacher: { select: { name: true } },
+        student: {
+          include: {
+            user: { select: { name: true } },
+            classroom: { select: { kodeKelas: true } },
+          },
+        },
+      },
+    });
+    res.json({
+      success: true,
+      data: {
+        id: updated.id,
+        alasan: updated.alasan,
+        keterangan: updated.keterangan,
+        bukti: updated.bukti,
+        updatedAt: updated.updatedAt,
+        student: {
+          id: updated.student.userId,
+          name: updated.student.user.name,
+          classroom: updated.student.classroom?.kodeKelas || null,
+        },
+        teacher: { name: updated.teacher.name },
+      },
+    });
+  } catch (err) {
+    console.error("Error update adjustment:", err);
+    res.status(500).json({ error: "Failed to update adjustment" });
+  }
+};
+
 // Search students by NISN or name (across all classes, active year only)
 const searchStudents = async (req, res) => {
   const { q } = req.query;
@@ -73,8 +165,6 @@ const getClassroomWithReports = async (req, res) => {
         });
       });
 
-      const avrgPoint = jmlSiswa > 0 ? Math.round(totalPoint / jmlSiswa) : 0;
-
       return {
         id: kelas.id,
         kodeKelas: kelas.kodeKelas,
@@ -82,7 +172,6 @@ const getClassroomWithReports = async (req, res) => {
         jmlSiswa,
         jmlPelanggaran,
         jmlPrestasi,
-        avrgPoint,
       };
     });
 
@@ -96,23 +185,13 @@ const getClassroomWithReports = async (req, res) => {
 // Ambil data siswa dalam kelas tertentu (berdasarkan tahun ajaran yang dipilih atau aktif)
 const getStudents = async (req, res) => {
   const { classroomId } = req.params;
-  let { tahunAjaranId } = req.query;
   try {
-    // Jika tahunAjaranId tidak diberikan, ambil tahun ajaran aktif
-    if (!tahunAjaranId || tahunAjaranId === "all") {
-      const {
-        validateActiveAcademicYear,
-      } = require("../../utils/academicYearUtils");
-      const activeYear = await validateActiveAcademicYear();
-      tahunAjaranId = activeYear.id;
-    }
     // Ambil semua siswa di kelas tersebut
     const students = await prisma.student.findMany({
       where: { classroomId: parseInt(classroomId) },
       include: {
         user: { select: { name: true } },
         reports: {
-          where: { tahunAjaranId: parseInt(tahunAjaranId) },
           include: { item: true },
         },
       },
@@ -520,6 +599,12 @@ const createPointAdjustment = async (req, res) => {
     } = require("../../utils/academicYearUtils");
     const activeYear = await validateActiveAcademicYear();
 
+    // File bukti (jika ada)
+    let buktiPath = null;
+    if (req.file) {
+      buktiPath = `/uploads/bukti/${req.file.filename}`;
+    }
+
     // Create point adjustment in transaction
     const result = await prisma.$transaction(async (tx) => {
       // Create point adjustment record
@@ -533,6 +618,7 @@ const createPointAdjustment = async (req, res) => {
           keterangan: keterangan || null,
           pointSebelum: pointSebelum,
           pointSesudah: pointSesudah,
+          bukti: buktiPath,
         },
         include: {
           teacher: {
@@ -604,6 +690,9 @@ const getAllPointAdjustments = async (req, res) => {
       startDate,
       endDate,
     } = req.query;
+    const tahunAjaranId = req.query.tahunAjaranId
+      ? parseInt(req.query.tahunAjaranId)
+      : undefined;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     let whereConditions = {};
@@ -618,6 +707,11 @@ const getAllPointAdjustments = async (req, res) => {
       whereConditions.teacherId = parseInt(teacherId);
     }
 
+    // Filter by tahun ajaran
+    if (tahunAjaranId) {
+      whereConditions.tahunAjaranId = tahunAjaranId;
+    }
+
     // Filter by date range
     if (startDate || endDate) {
       whereConditions.tanggal = {
@@ -628,7 +722,10 @@ const getAllPointAdjustments = async (req, res) => {
 
     const [adjustments, total] = await Promise.all([
       prisma.pointAdjustment.findMany({
-        where: whereConditions,
+        where: {
+          ...whereConditions,
+          student: { isArchived: false },
+        },
         include: {
           student: {
             include: {
@@ -639,7 +736,6 @@ const getAllPointAdjustments = async (req, res) => {
               },
               classroom: {
                 select: {
-                  namaKelas: true,
                   kodeKelas: true,
                 },
               },
@@ -656,7 +752,10 @@ const getAllPointAdjustments = async (req, res) => {
         take: parseInt(limit),
       }),
       prisma.pointAdjustment.count({
-        where: whereConditions,
+        where: {
+          ...whereConditions,
+          student: { isArchived: false },
+        },
       }),
     ]);
 
@@ -664,9 +763,10 @@ const getAllPointAdjustments = async (req, res) => {
       id: adj.id,
       student: {
         id: adj.student.userId,
+        nisn: adj.student.nisn,
         name: adj.student.user.name,
         classroom: adj.student.classroom
-          ? `${adj.student.classroom.namaKelas} ${adj.student.classroom.kodeKelas}`
+          ? `${adj.student.classroom.kodeKelas}`
           : null,
       },
       teacher: {
@@ -831,4 +931,6 @@ module.exports = {
   createPointAdjustment,
   getAllPointAdjustments,
   getAdjustmentStatistics,
+  getPointAdjustmentDetail,
+  updatePointAdjustment,
 };

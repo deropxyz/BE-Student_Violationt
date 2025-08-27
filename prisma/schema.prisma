@@ -177,8 +177,10 @@ model SuratPeringatan {
 
   // Info penerima
   emailSiswa  String?
-  emailOrtu   String?
   nomorHpOrtu String?
+
+  tahunAjaranId Int
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -234,6 +236,7 @@ model TahunAjaran {
   // Relasi dengan StudentReport
   reports          StudentReport[]
   pointAdjustments PointAdjustment[]
+  suratPeringatan  SuratPeringatan[]
 }
 
 // Tabel untuk menyimpan histori perubahan score siswa

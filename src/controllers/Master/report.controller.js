@@ -900,6 +900,7 @@ module.exports = {
 
   // Utility Functions
   recalculateAllTotalScores,
+  rekapTotalScoreStudent,
 
   // Helper Endpoints
   getAllStudents,
