@@ -7,6 +7,51 @@ const {
 const { checkAndTriggerSuratPeringatan } = require("../bk/automasi.controller");
 const prisma = new PrismaClient();
 
+// Fungsi util: rekap totalScore siswa dari report dan pointAdjustment, hanya untuk tahun ajaran aktif
+async function rekapTotalScoreStudent(studentId) {
+  // Ambil tahun ajaran aktif siswa (dari student.classroom atau field lain jika ada)
+  const student = await prisma.student.findUnique({
+    where: { id: parseInt(studentId) },
+    include: { classroom: true },
+  });
+  // Ambil tahun ajaran aktif
+  const activeYear = await prisma.tahunAjaran.findFirst({
+    where: { isActive: true },
+  });
+  if (!activeYear) throw new Error("Tidak ada tahun ajaran aktif");
+  // Hitung total dari semua report di tahun ajaran aktif
+  const reports = await prisma.studentReport.findMany({
+    where: {
+      studentId: parseInt(studentId),
+      tahunAjaranId: activeYear.id,
+    },
+    include: { item: { select: { tipe: true } } },
+  });
+  let totalReport = 0;
+  for (const r of reports) {
+    if (r.item?.tipe === "pelanggaran") totalReport -= r.pointSaat;
+    else if (r.item?.tipe === "prestasi") totalReport += r.pointSaat;
+  }
+  // Hitung total dari semua pointAdjustment di tahun ajaran aktif
+  const adjustments = await prisma.pointAdjustment.findMany({
+    where: {
+      studentId: parseInt(studentId),
+      tahunAjaranId: activeYear.id,
+    },
+  });
+  let totalAdjustment = 0;
+  for (const adj of adjustments) {
+    totalAdjustment += adj.pointPengurangan;
+  }
+  // Set totalScore siswa
+  const totalScore = totalReport + totalAdjustment;
+  await prisma.student.update({
+    where: { id: parseInt(studentId) },
+    data: { totalScore },
+  });
+  return totalScore;
+}
+
 // Adjust student points (BK can reduce violation points as a form of rehabilitation)
 const adjustStudentPoints = async (req, res) => {
   const teacherId = req.user.id;
@@ -273,7 +318,7 @@ const getAllStudentReports = async (req, res) => {
           reporter: { select: { name: true, role: true } },
           // HAPUS: bukti: true,
         },
-        orderBy: { tanggal: "desc" },
+        orderBy: { createdAt: "desc" },
         skip,
         take: parseInt(limit),
       }),
@@ -400,10 +445,36 @@ const createStudentReport = async (req, res) => {
   try {
     const file = req.file;
     let buktiPath = null;
-    if (file) {
-      buktiPath = `/uploads/bukti/${file.filename}`;
-    }
     const { studentId, itemId, tanggal, waktu, deskripsi, point } = req.body;
+    // Penamaan file bukti agar mudah dikenali
+    if (file) {
+      // Ambil data siswa untuk penamaan file
+      const student = await prisma.student.findUnique({
+        where: { id: parseInt(studentId) },
+        select: { nisn: true },
+      });
+      const ext = file.originalname.split(".").pop();
+      const dateStr = tanggal ? tanggal.replace(/-/g, "") : "";
+      const timestamp = Date.now();
+      const nisn = student?.nisn || "unknown";
+      const newFileName = `bukti_${nisn}_${dateStr}_${timestamp}.${ext}`;
+      // Rename file di filesystem jika perlu
+      const fs = require("fs");
+      const path = require("path");
+      const oldPath = path.join(
+        __dirname,
+        "../../uploads/bukti/",
+        file.filename
+      );
+      const newPath = path.join(__dirname, "../../uploads/bukti/", newFileName);
+      try {
+        fs.renameSync(oldPath, newPath);
+        buktiPath = `/uploads/bukti/${newFileName}`;
+      } catch (e) {
+        // Jika gagal rename, fallback ke nama lama
+        buktiPath = `/uploads/bukti/${file.filename}`;
+      }
+    }
 
     // Validate active academic year for creating new reports
     let activeYear;
@@ -498,23 +569,10 @@ const createStudentReport = async (req, res) => {
       },
     });
 
-    // Update student total score
+    // Get old total score before recalculation
     const oldTotalScore = student.totalScore;
-    let newTotalScore;
-
-    if (reportItem.tipe === "pelanggaran") {
-      await prisma.student.update({
-        where: { id: parseInt(studentId) },
-        data: { totalScore: { decrement: reportItem.point } },
-      });
-      newTotalScore = oldTotalScore - reportItem.point;
-    } else {
-      await prisma.student.update({
-        where: { id: parseInt(studentId) },
-        data: { totalScore: { increment: reportItem.point } },
-      });
-      newTotalScore = oldTotalScore + reportItem.point;
-    }
+    // Update student total score (rekap ulang)
+    const newTotalScore = await rekapTotalScoreStudent(studentId);
 
     // Trigger automasi surat peringatan jika ini adalah pelanggaran
     if (reportItem.tipe === "pelanggaran") {
@@ -580,6 +638,7 @@ const updateStudentReport = async (req, res) => {
     const { reportId } = req.params;
     const { studentId, itemId, tanggal, waktu, deskripsi, pointSaat } =
       req.body;
+    const file = req.file;
     // Check if report exists
     const existingReport = await prisma.studentReport.findUnique({
       where: { id: parseInt(reportId) },
@@ -631,6 +690,41 @@ const updateStudentReport = async (req, res) => {
         parsedWaktu = null;
       }
     }
+    // Penamaan file bukti jika ada file baru
+    let buktiPath = undefined;
+    if (file) {
+      const student = await prisma.student.findUnique({
+        where: {
+          id: studentId ? parseInt(studentId) : existingReport.studentId,
+        },
+        select: { nisn: true },
+      });
+      const ext = file.originalname.split(".").pop();
+      const dateStr = (
+        tanggal
+          ? tanggal
+          : existingReport.tanggal
+          ? existingReport.tanggal.toISOString().split("T")[0]
+          : ""
+      ).replace(/-/g, "");
+      const timestamp = Date.now();
+      const nisn = student?.nisn || "unknown";
+      const newFileName = `bukti_${nisn}_${dateStr}_${timestamp}.${ext}`;
+      const fs = require("fs");
+      const path = require("path");
+      const oldPath = path.join(
+        __dirname,
+        "../../uploads/bukti/",
+        file.filename
+      );
+      const newPath = path.join(__dirname, "../../uploads/bukti/", newFileName);
+      try {
+        fs.renameSync(oldPath, newPath);
+        buktiPath = `/uploads/bukti/${newFileName}`;
+      } catch (e) {
+        buktiPath = `/uploads/bukti/${file.filename}`;
+      }
+    }
     // Update report record
     const updatedReport = await prisma.studentReport.update({
       where: { id: parseInt(reportId) },
@@ -641,6 +735,7 @@ const updateStudentReport = async (req, res) => {
         waktu: parsedWaktu,
         deskripsi,
         pointSaat: finalPointSaat,
+        ...(buktiPath ? { bukti: buktiPath } : {}),
       },
       include: {
         student: { include: { user: true, classroom: true } },
@@ -648,17 +743,8 @@ const updateStudentReport = async (req, res) => {
         reporter: { select: { name: true, role: true } },
       },
     });
-    // Update student total score if points changed
-    if (pointDifference !== 0) {
-      const scoreIncrement =
-        newReportItem.tipe === "pelanggaran"
-          ? -pointDifference
-          : pointDifference;
-      await prisma.student.update({
-        where: { id: existingReport.studentId },
-        data: { totalScore: { increment: scoreIncrement } },
-      });
-    }
+    // Update student total score (rekap ulang)
+    await rekapTotalScoreStudent(existingReport.studentId);
     res.json({
       success: true,
       message: "Laporan berhasil diperbarui",
@@ -684,22 +770,38 @@ const deleteStudentReport = async (req, res) => {
     if (!existingReport) {
       return res.status(404).json({ error: "Laporan tidak ditemukan" });
     }
-    // Restore student points before deleting
-    if (existingReport.item.tipe === "pelanggaran") {
-      await prisma.student.update({
-        where: { id: existingReport.studentId },
-        data: { totalScore: { increment: existingReport.pointSaat } },
-      });
-    } else {
-      await prisma.student.update({
-        where: { id: existingReport.studentId },
-        data: { totalScore: { decrement: existingReport.pointSaat } },
-      });
+    // Hapus file bukti jika ada
+    if (existingReport.bukti) {
+      const fs = require("fs");
+      const path = require("path");
+      // Hilangkan leading slash jika ada, lalu join ke root project (bukan src)
+      let relativePath = existingReport.bukti.startsWith("/")
+        ? existingReport.bukti.slice(1)
+        : existingReport.bukti;
+      const buktiPath = path.join(process.cwd(), relativePath);
+      console.log("[Delete Report] Akan hapus file bukti:", buktiPath);
+      try {
+        if (fs.existsSync(buktiPath)) {
+          fs.unlinkSync(buktiPath);
+          console.log("[Delete Report] File bukti berhasil dihapus.");
+        } else {
+          console.warn(
+            "[Delete Report] File bukti tidak ditemukan:",
+            buktiPath
+          );
+        }
+      } catch (e) {
+        // Log error, tapi lanjutkan proses hapus report
+        console.error("Gagal menghapus file bukti:", e);
+      }
     }
+    // Setelah hapus report, rekap ulang totalScore siswa
     // Delete the report record
     await prisma.studentReport.delete({
       where: { id: parseInt(reportId) },
     });
+    // Rekap totalScore setelah delete
+    await rekapTotalScoreStudent(existingReport.studentId);
     res.json({
       success: true,
       message: "Laporan berhasil dihapus",

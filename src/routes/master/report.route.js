@@ -16,6 +16,7 @@ const {
   authenticate,
   requireRole,
 } = require("../../middlewares/auth.middleware");
+const upload = require("../../middlewares/upload.middleware");
 
 router.get(
   "/",
@@ -35,6 +36,7 @@ router.post(
   "/report",
   authenticate,
   requireRole("bk", "superadmin", "guru"),
+  upload.single("bukti"),
   createStudentReport
 );
 
@@ -42,6 +44,7 @@ router.put(
   "/report/:reportId",
   authenticate,
   requireRole("bk", "superadmin", "guru"),
+  upload.single("bukti"),
   updateStudentReport
 );
 

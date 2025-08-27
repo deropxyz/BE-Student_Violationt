@@ -232,7 +232,8 @@ model TahunAjaran {
   updatedAt      DateTime @updatedAt
 
   // Relasi dengan StudentReport
-  reports StudentReport[]
+  reports          StudentReport[]
+  pointAdjustments PointAdjustment[]
 }
 
 // Tabel untuk menyimpan histori perubahan score siswa
@@ -256,6 +257,9 @@ model PointAdjustment {
   teacherId Int
   bukti     String?
 
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  tahunAjaranId Int
+
   pointPengurangan Int // jumlah point yang dikurangi (positif)
   alasan           String // alasan pengurangan point
   keterangan       String? // keterangan tambahan
@@ -271,4 +275,5 @@ model PointAdjustment {
   @@index([studentId])
   @@index([teacherId])
   @@index([tanggal])
+  @@index([tahunAjaranId])
 }

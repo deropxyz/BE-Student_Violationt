@@ -2,17 +2,19 @@ const express = require("express");
 const router = express.Router();
 
 const {
-  getTahunAjaranNonAktif,
-  getLaporanHistori,
-  getRekapPerKelas,
-  getRekapPerSiswa,
-  getTahunAjaran,
+  exportLaporan,
+  exportPoinSiswa,
+  exportRekapLaporanSiswa,
+  previewLaporan,
+  getRekapOptions,
+  previewPoinSiswa,
 } = require("../../controllers/Master/rekap.controller");
 
-router.get("/histori", getLaporanHistori);
-router.get("/tahun-nonaktif", getTahunAjaranNonAktif);
-router.get("/rekap-per-kelas", getRekapPerKelas);
-router.get("/rekap-per-siswa", getRekapPerSiswa);
-router.get("/tahun-ajaran", getTahunAjaran);
+router.get("/laporan", exportLaporan);
+router.get("/poin-siswa", exportPoinSiswa);
+router.get("/rekap-laporan-siswa", exportRekapLaporanSiswa);
+router.get("/preview-laporan", previewLaporan);
+router.get("/options", getRekapOptions);
+router.get("/preview-poin-siswa", previewPoinSiswa);
 
 module.exports = router;

@@ -36,12 +36,17 @@ const searchStudents = async (req, res) => {
 const getClassroomWithReports = async (req, res) => {
   try {
     // Ambil tahun ajaran aktif
+    const {
+      validateActiveAcademicYear,
+    } = require("../../utils/academicYearUtils");
+    const activeYear = await validateActiveAcademicYear();
 
     const classrooms = await prisma.classroom.findMany({
       include: {
         students: {
           include: {
             reports: {
+              where: { tahunAjaranId: activeYear.id },
               include: { item: true },
             },
           },
@@ -91,18 +96,23 @@ const getClassroomWithReports = async (req, res) => {
 // Ambil data siswa dalam kelas tertentu (berdasarkan tahun ajaran yang dipilih atau aktif)
 const getStudents = async (req, res) => {
   const { classroomId } = req.params;
-  const { tahunAjaranId } = req.query;
+  let { tahunAjaranId } = req.query;
   try {
+    // Jika tahunAjaranId tidak diberikan, ambil tahun ajaran aktif
+    if (!tahunAjaranId || tahunAjaranId === "all") {
+      const {
+        validateActiveAcademicYear,
+      } = require("../../utils/academicYearUtils");
+      const activeYear = await validateActiveAcademicYear();
+      tahunAjaranId = activeYear.id;
+    }
     // Ambil semua siswa di kelas tersebut
     const students = await prisma.student.findMany({
       where: { classroomId: parseInt(classroomId) },
       include: {
         user: { select: { name: true } },
         reports: {
-          where:
-            tahunAjaranId && tahunAjaranId !== "all"
-              ? { tahunAjaranId: parseInt(tahunAjaranId) }
-              : {},
+          where: { tahunAjaranId: parseInt(tahunAjaranId) },
           include: { item: true },
         },
       },
@@ -504,6 +514,12 @@ const createPointAdjustment = async (req, res) => {
     }
     const actualPengurangan = pointSebelum - pointSesudah;
 
+    // Get active academic year
+    const {
+      validateActiveAcademicYear,
+    } = require("../../utils/academicYearUtils");
+    const activeYear = await validateActiveAcademicYear();
+
     // Create point adjustment in transaction
     const result = await prisma.$transaction(async (tx) => {
       // Create point adjustment record
@@ -511,6 +527,7 @@ const createPointAdjustment = async (req, res) => {
         data: {
           studentId: student.id,
           teacherId: teacherId,
+          tahunAjaranId: activeYear.id,
           pointPengurangan: parseInt(pointPengurangan),
           alasan: alasan,
           keterangan: keterangan || null,
