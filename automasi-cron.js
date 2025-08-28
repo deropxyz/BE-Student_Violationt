@@ -3,6 +3,7 @@ const { PrismaClient } = require("@prisma/client");
 const {
   checkAndTriggerSuratPeringatan,
 } = require("./src/controllers/bk/automasi.controller");
+const { exec } = require("child_process");
 
 const prisma = new PrismaClient();
 
@@ -32,4 +33,19 @@ async function triggerSuratPeringatanSemuaSiswa() {
 cron.schedule("0 * * * *", () => {
   console.log("[CRON] Menjalankan pengecekan surat peringatan otomatis...");
   triggerSuratPeringatanSemuaSiswa();
+});
+
+// Jadwalkan penghapusan data siswa lama setiap hari jam 01:00
+cron.schedule("0 1 * * *", () => {
+  console.log("[CRON] Menjalankan penghapusan data siswa lama...");
+  exec("node automasi-delete-old-students.js", (error, stdout, stderr) => {
+    if (error) {
+      console.error(`[CRON] Error hapus siswa lama: ${error.message}`);
+      return;
+    }
+    if (stderr) {
+      console.error(`[CRON] Stderr hapus siswa lama: ${stderr}`);
+    }
+    console.log(`[CRON] Output hapus siswa lama: ${stdout}`);
+  });
 });
