@@ -1,5 +1,4 @@
 const { PrismaClient } = require("@prisma/client");
-
 const prisma = new PrismaClient();
 
 // Ambil semua siswa di kelas wali kelas yang sedang login (dengan pagination & search)

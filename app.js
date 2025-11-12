@@ -26,6 +26,7 @@ const walikelasRoute = require("./src/routes/walikelas.route");
 const rekapRoute = require("./src/routes/master/rekap.route");
 const automasiRoute = require("./src/routes/automasi.route");
 const penangananRoute = require("./src/routes/master/penanganan.route");
+const jurusanRoute = require("./src/routes/jurusan.routes");
 
 dotenv.config();
 
@@ -72,6 +73,7 @@ app.use("/api/student", studentRoute);
 app.use("/api/master/kategori", kategoriRoute);
 app.use("/api/walikelas", walikelasRoute);
 app.use("/api/automasi", automasiRoute);
+app.use("/api/jurusan", jurusanRoute);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

@@ -63,16 +63,14 @@ async function previewPoinSiswa(req, res) {
         // Total score = sum pointSaat dari laporan di bulan tsb, pelanggaran dihitung minus
         totalScore = filteredReports.reduce((sum, r) => {
           if (typeof r.pointSaat !== "number") return sum;
-          if (r.item?.tipe === "pelanggaran")
-            return sum - Math.abs(r.pointSaat);
-          return sum + r.pointSaat;
+          return sum + r.pointSaat; // Point sudah benar di database
         }, 0);
-        // Total poin pelanggaran (selalu minus)
+        // Total poin pelanggaran (akan negatif)
         totalPoinPelanggaran = filteredReports.reduce(
           (sum, r) =>
             sum +
             (r.item?.tipe === "pelanggaran" && typeof r.pointSaat === "number"
-              ? -Math.abs(r.pointSaat)
+              ? r.pointSaat // Sudah negatif di database
               : 0),
           0
         );
@@ -216,10 +214,7 @@ async function previewLaporan(req, res) {
       tipe: r.item?.tipe,
       kategori: r.item?.kategori?.nama,
       item: r.item?.nama,
-      point:
-        r.item?.tipe === "pelanggaran" && typeof r.pointSaat === "number"
-          ? -Math.abs(r.pointSaat)
-          : r.pointSaat,
+      point: r.pointSaat, // Point sudah benar di database
       deskripsi: r.deskripsi,
       reporter: r.reporter?.name,
       tahunAjaran: r.tahunAjaran?.tahunAjaran,
@@ -330,10 +325,7 @@ async function exportLaporan(req, res) {
         tipe: r.item?.tipe,
         kategori: r.item?.kategori?.nama,
         item: r.item?.nama,
-        point:
-          r.item?.tipe === "pelanggaran" && typeof r.pointSaat === "number"
-            ? -Math.abs(r.pointSaat)
-            : r.pointSaat,
+        point: r.pointSaat, // Point sudah benar di database
         deskripsi: r.deskripsi,
         reporter: r.reporter?.name,
         tahunAjaran: r.tahunAjaran?.tahunAjaran,
@@ -518,7 +510,7 @@ async function exportPoinSiswa(req, res) {
         (sum, r) =>
           sum +
           (r.item?.tipe === "pelanggaran" && typeof r.pointSaat === "number"
-            ? -Math.abs(r.pointSaat)
+            ? r.pointSaat // Sudah negatif di database
             : 0),
         0
       );
@@ -546,8 +538,7 @@ async function exportPoinSiswa(req, res) {
         : 0;
       const totalScore = s.reports.reduce((sum, r) => {
         if (typeof r.pointSaat !== "number") return sum;
-        if (r.item?.tipe === "pelanggaran") return sum - Math.abs(r.pointSaat);
-        return sum + r.pointSaat;
+        return sum + r.pointSaat; // Point sudah benar di database
       }, 0);
       const totalAdjustment = s.pointAdjustments
         ? s.pointAdjustments.reduce(

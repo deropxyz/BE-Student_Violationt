@@ -29,8 +29,8 @@ async function rekapTotalScoreStudent(studentId) {
   });
   let totalReport = 0;
   for (const r of reports) {
-    if (r.item?.tipe === "pelanggaran") totalReport -= r.pointSaat;
-    else if (r.item?.tipe === "prestasi") totalReport += r.pointSaat;
+    // Point sudah benar di database (negatif untuk pelanggaran, positif untuk prestasi)
+    totalReport += r.pointSaat;
   }
   // Hitung total dari semua pointAdjustment di tahun ajaran aktif
   const adjustments = await prisma.pointAdjustment.findMany({
@@ -678,11 +678,8 @@ const recalculateAllTotalScores = async (req, res) => {
       let correctTotalScore = 0;
 
       reports.forEach((report) => {
-        if (report.item.tipe === "pelanggaran") {
-          correctTotalScore -= report.pointSaat;
-        } else {
-          correctTotalScore += report.pointSaat;
-        }
+        // Point sudah benar di database (negatif untuk pelanggaran, positif untuk prestasi)
+        correctTotalScore += report.pointSaat;
       });
 
       const currentTotalScore = student.totalScore;

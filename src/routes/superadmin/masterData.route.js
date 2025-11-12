@@ -8,6 +8,8 @@ const {
   updateClassroom,
   deleteClassroom,
   getAllTeachers,
+  getAvailableTeachers,
+  getAllJurusan,
   getAllAngkatan,
   getAngkatanById,
   createAngkatan,
@@ -50,6 +52,13 @@ router.get(
   requireRole("superadmin"),
   getAllTeachers
 );
+router.get(
+  "/teachers/available",
+  authenticate,
+  requireRole("superadmin"),
+  getAvailableTeachers
+);
+router.get("/jurusan", authenticate, requireRole("superadmin"), getAllJurusan);
 router.get(
   "/angkatan",
   authenticate,

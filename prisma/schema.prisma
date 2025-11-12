@@ -80,6 +80,21 @@ model Teacher {
   updatedAt DateTime @updatedAt
 
   classrooms Classroom[] @relation("WaliKelas")
+  jurusan    Jurusan?
+}
+
+model Jurusan {
+  id          Int      @id @default(autoincrement())
+  kodeJurusan String   @unique // "RPL", "TPM", "DKV", etc
+  namaJurusan String // "Rekayasa Perangkat Lunak", "Teknik Pemesinan", etc
+  deskripsi   String? // deskripsi singkat jurusan
+  kajur       Teacher? @relation(fields: [kajurId], references: [id])
+  kajurId     Int?     @unique
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  classrooms Classroom[]
 }
 
 model Classroom {
@@ -87,7 +102,9 @@ model Classroom {
   kodeKelas   String   @unique
   namaKelas   String
   waliKelas   Teacher? @relation("WaliKelas", fields: [waliKelasId], references: [id])
-  waliKelasId Int?     @unique // Setiap guru hanya bisa menjadi wali kelas untuk satu kelas
+  waliKelasId Int?     @unique
+  jurusan     Jurusan  @relation(fields: [jurusanId], references: [id])
+  jurusanId   Int
 
   students Student[]
 }

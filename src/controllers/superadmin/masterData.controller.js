@@ -7,6 +7,13 @@ const getAllClassrooms = async (req, res) => {
     const [classrooms, total] = await Promise.all([
       prisma.classroom.findMany({
         include: {
+          jurusan: {
+            select: {
+              id: true,
+              kodeJurusan: true,
+              namaJurusan: true,
+            },
+          },
           waliKelas: {
             select: {
               user: {
@@ -33,6 +40,13 @@ const getAllClassrooms = async (req, res) => {
       id: c.id,
       kodeKelas: c.kodeKelas,
       namaKelas: c.namaKelas,
+      jurusan: c.jurusan
+        ? {
+            id: c.jurusan.id,
+            kode: c.jurusan.kodeJurusan,
+            nama: c.jurusan.namaJurusan,
+          }
+        : null,
       waliKelas: c.waliKelas?.user?.name || null,
       nip: c.waliKelas?.nip || null,
       jumlahSiswa: c._count.students,
@@ -132,14 +146,30 @@ const getClassroomById = async (req, res) => {
 
 const createClassroom = async (req, res) => {
   try {
-    const { kodeKelas, namaKelas, waliKelasId } = req.body;
+    const { kodeKelas, namaKelas, waliKelasId, jurusanId, tingkat, rombel } =
+      req.body;
 
     console.log("Create classroom request:", {
       kodeKelas,
       namaKelas,
       waliKelasId,
+      jurusanId,
       waliKelasIdType: typeof waliKelasId,
     });
+
+    // Validate required fields
+    if (!jurusanId) {
+      return res.status(400).json({ error: "Jurusan is required" });
+    }
+
+    // Check if jurusan exists
+    const jurusanExists = await prisma.jurusan.findUnique({
+      where: { id: parseInt(jurusanId) },
+    });
+
+    if (!jurusanExists) {
+      return res.status(400).json({ error: "Jurusan not found" });
+    }
 
     // Check if classroom code already exists
     if (kodeKelas) {
@@ -190,10 +220,18 @@ const createClassroom = async (req, res) => {
       data: {
         kodeKelas: kodeKelas || null,
         namaKelas: namaKelas || null,
+        jurusanId: parseInt(jurusanId),
         waliKelasId:
           waliKelasId && waliKelasId !== "" ? parseInt(waliKelasId) : null,
       },
       include: {
+        jurusan: {
+          select: {
+            id: true,
+            kodeJurusan: true,
+            namaJurusan: true,
+          },
+        },
         waliKelas: {
           select: {
             id: true,
@@ -212,12 +250,20 @@ const createClassroom = async (req, res) => {
       id: classroom.id,
       waliKelasId: classroom.waliKelasId,
       waliKelasName: classroom.waliKelas?.user?.name,
+      jurusan: classroom.jurusan?.namaJurusan,
     });
 
     res.status(201).json({
       id: classroom.id,
       kodeKelas: classroom.kodeKelas,
       namaKelas: classroom.namaKelas,
+      jurusan: classroom.jurusan
+        ? {
+            id: classroom.jurusan.id,
+            kode: classroom.jurusan.kodeJurusan,
+            nama: classroom.jurusan.namaJurusan,
+          }
+        : null,
       waliKelas: classroom.waliKelas?.user?.name || null,
       waliKelasId: classroom.waliKelasId,
       jumlahSiswa: 0,
@@ -231,13 +277,15 @@ const createClassroom = async (req, res) => {
 const updateClassroom = async (req, res) => {
   try {
     const { id } = req.params;
-    const { kodeKelas, namaKelas, waliKelasId } = req.body;
+    const { kodeKelas, namaKelas, waliKelasId, jurusanId, tingkat, rombel } =
+      req.body;
 
     console.log("Update classroom request:", {
       id,
       kodeKelas,
       namaKelas,
       waliKelasId,
+      jurusanId,
       waliKelasIdType: typeof waliKelasId,
     });
 
@@ -248,6 +296,17 @@ const updateClassroom = async (req, res) => {
 
     if (!existingClassroom) {
       return res.status(404).json({ error: "Classroom not found" });
+    }
+
+    // Check if jurusan exists (if being updated)
+    if (jurusanId && jurusanId !== existingClassroom.jurusanId) {
+      const jurusanExists = await prisma.jurusan.findUnique({
+        where: { id: parseInt(jurusanId) },
+      });
+
+      if (!jurusanExists) {
+        return res.status(400).json({ error: "Jurusan not found" });
+      }
     }
 
     // Check if kode is being updated and already exists
@@ -304,6 +363,7 @@ const updateClassroom = async (req, res) => {
     const updateData = {};
     if (kodeKelas !== undefined) updateData.kodeKelas = kodeKelas;
     if (namaKelas !== undefined) updateData.namaKelas = namaKelas;
+    if (jurusanId !== undefined) updateData.jurusanId = parseInt(jurusanId);
 
     // Handle wali kelas assignment - allow setting to null or empty string
     if (waliKelasId !== undefined) {
@@ -315,6 +375,13 @@ const updateClassroom = async (req, res) => {
       where: { id: parseInt(id) },
       data: updateData,
       include: {
+        jurusan: {
+          select: {
+            id: true,
+            kodeJurusan: true,
+            namaJurusan: true,
+          },
+        },
         waliKelas: {
           select: {
             id: true,
@@ -339,12 +406,20 @@ const updateClassroom = async (req, res) => {
       id: classroom.id,
       waliKelasId: classroom.waliKelasId,
       waliKelasName: classroom.waliKelas?.user?.name,
+      jurusan: classroom.jurusan?.namaJurusan,
     });
 
     res.json({
       id: classroom.id,
       kodeKelas: classroom.kodeKelas,
       namaKelas: classroom.namaKelas,
+      jurusan: classroom.jurusan
+        ? {
+            id: classroom.jurusan.id,
+            kode: classroom.jurusan.kodeJurusan,
+            nama: classroom.jurusan.namaJurusan,
+          }
+        : null,
       waliKelas: classroom.waliKelas?.user?.name || null,
       waliKelasId: classroom.waliKelasId,
       jumlahSiswa: classroom._count.students,
@@ -587,38 +662,108 @@ const deleteAngkatan = async (req, res) => {
 // Get all teachers for dropdown
 const getAllTeachers = async (req, res) => {
   try {
+    // Get all teachers (including those already assigned as wali kelas)
     const teachers = await prisma.teacher.findMany({
-      select: {
-        id: true,
+      include: {
         user: {
-          select: {
-            name: true,
-            email: true,
-          },
+          select: { id: true, name: true, email: true },
         },
-        nip: true,
       },
       orderBy: {
-        user: {
-          name: "asc",
-        },
+        user: { name: "asc" },
       },
     });
 
-    const formattedTeachers = teachers.map((teacher) => ({
-      id: teacher.id,
-      name: teacher.user.name,
-      email: teacher.user.email,
-      nip: teacher.nip,
-    }));
-
     res.json({
-      success: true,
-      data: formattedTeachers,
+      data: teachers.map((t) => ({
+        id: t.id,
+        name: t.user.name,
+        email: t.user.email,
+        nip: t.nip,
+      })),
     });
   } catch (err) {
-    console.error("Error getting teachers:", err);
-    res.status(500).json({ error: "Failed to fetch teachers" });
+    console.error(err);
+    res.status(500).json({ error: "Gagal mengambil data guru" });
+  }
+};
+
+// Get available teachers (not assigned as wali kelas) for dropdown
+const getAvailableTeachers = async (req, res) => {
+  try {
+    const { excludeClassroomId } = req.query;
+
+    let whereCondition = {
+      classrooms: {
+        none: {},
+      },
+    };
+
+    // If editing a classroom, we need to include the current wali kelas
+    if (excludeClassroomId) {
+      whereCondition = {
+        OR: [
+          {
+            classrooms: {
+              none: {},
+            },
+          },
+          {
+            classrooms: {
+              some: {
+                id: parseInt(excludeClassroomId),
+              },
+            },
+          },
+        ],
+      };
+    }
+
+    const teachers = await prisma.teacher.findMany({
+      where: whereCondition,
+      include: {
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+      orderBy: {
+        user: { name: "asc" },
+      },
+    });
+
+    res.json({
+      data: teachers.map((t) => ({
+        id: t.id,
+        name: t.user.name,
+        email: t.user.email,
+        nip: t.nip,
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Gagal mengambil data guru yang tersedia" });
+  }
+};
+
+// Get all jurusan for dropdown/selection
+const getAllJurusan = async (req, res) => {
+  try {
+    const jurusan = await prisma.jurusan.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        kodeJurusan: true,
+        namaJurusan: true,
+      },
+      orderBy: { kodeJurusan: "asc" },
+    });
+
+    res.json({
+      data: jurusan,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Gagal mengambil data jurusan" });
   }
 };
 
@@ -632,6 +777,10 @@ module.exports = {
 
   // Teacher Management
   getAllTeachers,
+  getAvailableTeachers,
+
+  // Jurusan Management
+  getAllJurusan,
 
   // Angkatan Management
   getAllAngkatan,

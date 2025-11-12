@@ -6,7 +6,15 @@ require("dotenv").config();
 
 const prisma = new PrismaClient();
 
-const jurusanList = ["RPL", "TPM", "DKV", "TKRO", "TITL", "MPLB"];
+// List jurusan: kode dan nama lengkap
+const jurusanList = [
+  { kode: "RPL", nama: "Rekayasa Perangkat Lunak" },
+  { kode: "TPM", nama: "Teknik Pemesinan" },
+  { kode: "DKV", nama: "Desain Komunikasi Visual" },
+  { kode: "TKRO", nama: "Teknik Kendaraan Ringan Otomotif" },
+  { kode: "TITL", nama: "Teknik Instalasi Tenaga Listrik" },
+  { kode: "MPLB", nama: "Manajemen Perkantoran dan Layanan Bisnis" },
+];
 const tingkatList = ["X", "XI", "XII"];
 
 // Buat 1 kelas per kombinasi tingkat x jurusan (total 18 kelas)
@@ -14,10 +22,14 @@ const kelasList = [];
 let kelasCounter = {};
 for (const tingkat of tingkatList) {
   for (const jurusan of jurusanList) {
-    const key = `${tingkat}-${jurusan}`;
+    const key = `${tingkat}-${jurusan.kode}`;
     if (!kelasCounter[key]) kelasCounter[key] = 1;
-    const kodeKelas = `${tingkat}-${jurusan}-${kelasCounter[key]}`;
-    kelasList.push({ namaKelas: `${tingkat} ${jurusan}`, kodeKelas });
+    const kodeKelas = `${tingkat}-${jurusan.kode}-${kelasCounter[key]}`;
+    kelasList.push({
+      namaKelas: `${tingkat} ${jurusan.kode}`,
+      kodeKelas,
+      jurusanKode: jurusan.kode,
+    });
     kelasCounter[key]++;
   }
 }
@@ -38,6 +50,24 @@ async function main() {
   const defaultPassword = process.env.DEFAULT_PASSWORD || "smkn14garut";
   const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
+  // Seed jurusan
+  const jurusanIdMap = {};
+  for (const jurusan of jurusanList) {
+    let jurusanDb = await prisma.jurusan.findFirst({
+      where: { kodeJurusan: jurusan.kode },
+    });
+    if (!jurusanDb) {
+      jurusanDb = await prisma.jurusan.create({
+        data: {
+          kodeJurusan: jurusan.kode,
+          namaJurusan: jurusan.nama,
+        },
+      });
+      console.log(`Jurusan dibuat: ${jurusan.kode} - ${jurusan.nama}`);
+    }
+    jurusanIdMap[jurusan.kode] = jurusanDb.id;
+  }
+
   // Seed angkatan
   const angkatanMap = {
     X: "2025",
@@ -54,14 +84,20 @@ async function main() {
     angkatanIdMap[tingkat] = angkatan.id;
   }
 
-  // Buat kelas jika belum ada
+  // Buat kelas jika belum ada, tambahkan jurusanId
   for (const kelas of kelasList) {
     let kelasDb = await prisma.classroom.findFirst({
       where: { kodeKelas: kelas.kodeKelas },
     });
     if (!kelasDb) {
+      // Ambil jurusanId dari jurusanIdMap
+      const jurusanId = jurusanIdMap[kelas.jurusanKode];
       kelasDb = await prisma.classroom.create({
-        data: { namaKelas: kelas.namaKelas, kodeKelas: kelas.kodeKelas },
+        data: {
+          namaKelas: kelas.namaKelas,
+          kodeKelas: kelas.kodeKelas,
+          jurusanId: jurusanId,
+        },
       });
       console.log(`Kelas dibuat: ${kelas.namaKelas} (${kelas.kodeKelas})`);
     }

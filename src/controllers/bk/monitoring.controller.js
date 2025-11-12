@@ -157,7 +157,7 @@ const getClassroomWithReports = async (req, res) => {
         siswa.reports.forEach((report) => {
           if (report.item.tipe === "pelanggaran") {
             jmlPelanggaran++;
-            totalPoint -= report.pointSaat || 0;
+            totalPoint += report.pointSaat || 0; // Point sudah negatif di database
           } else if (report.item.tipe === "prestasi") {
             jmlPrestasi++;
             totalPoint += report.pointSaat || 0;
@@ -261,7 +261,7 @@ const getStudentDetailBK = async (req, res) => {
     student.reports.forEach((report) => {
       if (report.item.tipe === "pelanggaran") {
         totalPelanggaran++;
-        subtotalScore -= report.pointSaat || 0;
+        subtotalScore += report.pointSaat || 0; // Point sudah negatif di database
       } else if (report.item.tipe === "prestasi") {
         totalPrestasi++;
         subtotalScore += report.pointSaat || 0;

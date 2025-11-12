@@ -108,10 +108,81 @@ const isBKOrWalikelas = async (req, res, next) => {
   return res.status(403).json({ message: "Akses ditolak." });
 };
 
+// Middleware: cek akses jurusan berdasarkan role
+const checkJurusanAccess = async (req, res, next) => {
+  try {
+    const { jurusanId } = req.params;
+
+    // Superadmin dan BK bisa akses semua jurusan
+    if (req.user.role === "superadmin" || req.user.role === "bk") {
+      return next();
+    }
+
+    // Guru hanya bisa akses jurusan berdasarkan tugas mereka (kajur atau wali kelas)
+    if (req.user.role === "guru") {
+      const teacher = await prisma.teacher.findUnique({
+        where: { userId: req.user.id },
+        include: {
+          classrooms: {
+            select: { jurusanId: true },
+          },
+          jurusan: {
+            select: { id: true, kodeJurusan: true, namaJurusan: true },
+          },
+        },
+      });
+
+      if (!teacher) {
+        return res.status(403).json({
+          success: false,
+          error: "Akses ditolak. Data guru tidak ditemukan.",
+        });
+      }
+
+      const requestedJurusanId = parseInt(jurusanId);
+      let hasAccess = false;
+
+      // Cek apakah guru adalah kajur dari jurusan ini
+      if (teacher.jurusan && teacher.jurusan.id === requestedJurusanId) {
+        hasAccess = true;
+      }
+
+      // Cek apakah guru adalah wali kelas di jurusan ini (hanya jika bukan kajur)
+      if (!hasAccess && teacher.classrooms.length > 0) {
+        hasAccess = teacher.classrooms.some(
+          (classroom) => classroom.jurusanId === requestedJurusanId
+        );
+      }
+
+      if (!hasAccess) {
+        return res.status(403).json({
+          success: false,
+          error: "Akses ditolak. Anda tidak memiliki tugas di jurusan ini.",
+        });
+      }
+
+      req.teacher = teacher;
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      error: "Akses ditolak. Role tidak diizinkan.",
+    });
+  } catch (error) {
+    console.error("checkJurusanAccess middleware error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Internal server error",
+    });
+  }
+};
+
 module.exports = {
   authenticate,
   requireRole,
   isSuperadmin,
   isWalikelas,
   isBKOrWalikelas,
+  checkJurusanAccess,
 };
