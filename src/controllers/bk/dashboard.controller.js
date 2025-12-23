@@ -19,15 +19,17 @@ const getDashboardSummary = async (req, res) => {
     }
 
     // Pelanggaran bulan ini
+    const startOfMonth = new Date(thisYear, thisMonth - 1, 1);
+    const endOfMonth = new Date(thisYear, thisMonth, 1);
+
     const pelanggaranBulanIni = await prisma.studentReport.count({
       where: {
+        status: "approved",
         item: { tipe: "pelanggaran" },
         tahunAjaranId: tahunAjaranId,
         tanggal: {
-          gte: new Date(`${thisYear}-${String(thisMonth).padStart(2, "0")}-01`),
-          lt: new Date(
-            `${thisYear}-${String(thisMonth + 1).padStart(2, "0")}-01`
-          ),
+          gte: startOfMonth,
+          lt: endOfMonth,
         },
       },
     });
@@ -35,13 +37,12 @@ const getDashboardSummary = async (req, res) => {
     // Prestasi bulan ini
     const prestasiBulanIni = await prisma.studentReport.count({
       where: {
+        status: "approved",
         item: { tipe: "prestasi" },
         tahunAjaranId: tahunAjaranId,
         tanggal: {
-          gte: new Date(`${thisYear}-${String(thisMonth).padStart(2, "0")}-01`),
-          lt: new Date(
-            `${thisYear}-${String(thisMonth + 1).padStart(2, "0")}-01`
-          ),
+          gte: startOfMonth,
+          lt: endOfMonth,
         },
       },
     });
@@ -51,10 +52,8 @@ const getDashboardSummary = async (req, res) => {
       where: {
         tahunAjaranId: tahunAjaranId,
         tanggal: {
-          gte: new Date(`${thisYear}-${String(thisMonth).padStart(2, "0")}-01`),
-          lt: new Date(
-            `${thisYear}-${String(thisMonth + 1).padStart(2, "0")}-01`
-          ),
+          gte: startOfMonth,
+          lt: endOfMonth,
         },
       },
     });
@@ -64,10 +63,8 @@ const getDashboardSummary = async (req, res) => {
       where: {
         tahunAjaranId: tahunAjaranId,
         createdAt: {
-          gte: new Date(`${thisYear}-${String(thisMonth).padStart(2, "0")}-01`),
-          lt: new Date(
-            `${thisYear}-${String(thisMonth + 1).padStart(2, "0")}-01`
-          ),
+          gte: startOfMonth,
+          lt: endOfMonth,
         },
       },
     });
@@ -98,6 +95,7 @@ const getRecentViolations = async (req, res) => {
     }
     const recent = await prisma.studentReport.findMany({
       where: {
+        status: "approved",
         item: { tipe: "pelanggaran" },
         tahunAjaranId: tahunAjaranId,
       },

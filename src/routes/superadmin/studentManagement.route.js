@@ -52,7 +52,7 @@ router.post(
 
 // Get student detail by ID
 router.get(
-  "/:studentId",
+  "/:studentId/detail",
   authenticate,
   requireRole("superadmin"),
   getStudentDetail

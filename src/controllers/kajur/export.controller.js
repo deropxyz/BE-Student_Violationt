@@ -1,93 +1,86 @@
 const { PrismaClient } = require("@prisma/client");
+const prisma = new PrismaClient();
 const ExcelJS = require("exceljs");
 
-const prisma = new PrismaClient();
-
-// Ambil informasi kelas yang diampu wali kelas
-const getKelasInfo = async (req, res) => {
+// Get jurusan info for kajur
+const getJurusanInfo = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Cari guru dan kelas yang diwalikan
     const teacher = await prisma.teacher.findUnique({
       where: { userId },
       include: {
-        classrooms: {
-          include: {
-            jurusan: true,
-          },
-        },
+        jurusan: true,
       },
     });
 
-    if (!teacher || !teacher.classrooms.length) {
+    if (!teacher || !teacher.jurusan) {
       return res.status(404).json({
         success: false,
-        error: "Anda tidak menjadi wali kelas manapun",
+        error: "Anda tidak memiliki akses sebagai Kepala Jurusan",
       });
     }
-
-    const classroom = teacher.classrooms[0];
-
-    const kelasInfo = {
-      id: classroom.id,
-      kodeKelas: classroom.kodeKelas,
-      namaKelas: classroom.namaKelas,
-      jurusan: classroom.jurusan?.namaJurusan || null,
-    };
 
     res.json({
       success: true,
-      data: kelasInfo,
+      data: {
+        id: teacher.jurusan.id,
+        kodeJurusan: teacher.jurusan.kodeJurusan,
+        namaJurusan: teacher.jurusan.namaJurusan,
+      },
     });
   } catch (err) {
-    console.error("Error getKelasInfo:", err);
-    res.status(500).json({
-      success: false,
-      error: "Gagal mengambil informasi kelas",
-    });
+    console.error("Get jurusan info error:", err);
+    res
+      .status(500)
+      .json({ success: false, error: "Gagal mengambil info jurusan" });
   }
 };
 
-// Preview laporan untuk kelas yang diampu wali kelas
-const previewLaporanWK = async (req, res) => {
+// Preview laporan untuk jurusan yang diampu kajur
+const previewLaporanKajur = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { bulan, tahunAjaranId, tipe } = req.query;
+    const { bulan, tahunAjaranId, tipe, kelasId } = req.query;
 
-    // Cari guru dan kelas yang diwalikan
+    // Cari guru dan jurusan yang diampu
     const teacher = await prisma.teacher.findUnique({
       where: { userId },
-      include: { classrooms: true },
+      include: { jurusan: true },
     });
 
-    if (!teacher || !teacher.classrooms.length) {
+    if (!teacher || !teacher.jurusan) {
       return res.status(404).json({
         success: false,
-        error: "Anda tidak menjadi wali kelas manapun",
+        error: "Anda tidak memiliki akses sebagai Kepala Jurusan",
       });
     }
 
-    const classroom = teacher.classrooms[0];
-    const kelas = classroom.kodeKelas;
+    const jurusanId = teacher.jurusan.id;
 
     // Setup filter
     let where = {
-      student: { classroom: { kodeKelas: kelas } },
+      student: { classroom: { jurusanId } },
     };
 
     if (tahunAjaranId) where.tahunAjaranId = parseInt(tahunAjaranId);
     if (tipe && tipe !== "all") where["item"] = { tipe };
+    if (kelasId)
+      where.student = { ...where.student, classroomId: parseInt(kelasId) };
     if (bulan) {
-      const [tahun, bln] = bulan.split("-");
-      const nextMonth =
-        Number(bln) === 12 ? "01" : String(Number(bln) + 1).padStart(2, "0");
-      const nextYear = Number(bln) === 12 ? String(Number(tahun) + 1) : tahun;
+      const bulanInt = parseInt(bulan);
+      const tahunSekarang = new Date().getFullYear();
+      const nextMonth = bulanInt === 12 ? 1 : bulanInt + 1;
+      const nextYear = bulanInt === 12 ? tahunSekarang + 1 : tahunSekarang;
+
       where.tanggal = {
-        gte: new Date(`${tahun}-${bln}-01`),
-        lt: new Date(`${nextYear}-${nextMonth}-01`),
+        gte: new Date(tahunSekarang, bulanInt - 1, 1),
+        lt: new Date(nextYear, nextMonth - 1, 1),
       };
     }
+
+    // Only show approved reports
+    where.status = "approved";
 
     const reports = await prisma.studentReport.findMany({
       where,
@@ -113,64 +106,68 @@ const previewLaporanWK = async (req, res) => {
     });
 
     const data = reports.map((r) => ({
+      id: r.id,
       nisn: r.student?.nisn,
-      nama: r.student?.user?.name,
+      namaSiswa: r.student?.user?.name,
       kelas: r.student?.classroom?.kodeKelas || r.classAtTime,
       namaKelas: r.student?.classroom?.namaKelas,
       tanggal: r.tanggal.toISOString().slice(0, 10),
       tipe: r.item?.tipe,
       kategori: r.item?.kategori?.nama,
       item: r.item?.nama,
-      point: r.pointSaat, // Point sudah benar di database
+      poin: r.pointSaat,
       deskripsi: r.deskripsi,
-      reporter: r.reporter?.name,
+      pelapor: r.reporter?.name,
       tahunAjaran: r.tahunAjaran?.tahunAjaran,
     }));
 
     res.json({ success: true, data });
   } catch (err) {
-    console.error("Preview laporan WK error:", err);
+    console.error("Preview laporan Kajur error:", err);
     res.status(500).json({ success: false, error: "Gagal preview laporan" });
   }
 };
 
-// Export laporan untuk kelas yang diampu wali kelas
-const exportLaporanWK = async (req, res) => {
+// Export laporan untuk jurusan yang diampu kajur
+const exportLaporanKajur = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { bulan, tahunAjaranId, tipe } = req.query;
+    const { bulan, tahunAjaranId, tipe, kelasId } = req.query;
 
-    // Cari guru dan kelas yang diwalikan
+    // Cari guru dan jurusan yang diampu
     const teacher = await prisma.teacher.findUnique({
       where: { userId },
-      include: { classrooms: true },
+      include: { jurusan: true },
     });
 
-    if (!teacher || !teacher.classrooms.length) {
+    if (!teacher || !teacher.jurusan) {
       return res.status(404).json({
         success: false,
-        error: "Anda tidak menjadi wali kelas manapun",
+        error: "Anda tidak memiliki akses sebagai Kepala Jurusan",
       });
     }
 
-    const classroom = teacher.classrooms[0];
-    const kelas = classroom.kodeKelas;
+    const jurusanId = teacher.jurusan.id;
+    const namaJurusan = teacher.jurusan.namaJurusan;
 
     // Setup filter
     let where = {
-      student: { classroom: { kodeKelas: kelas } },
+      student: { classroom: { jurusanId } },
     };
 
     if (tahunAjaranId) where.tahunAjaranId = parseInt(tahunAjaranId);
     if (tipe && tipe !== "all") where["item"] = { tipe };
+    if (kelasId)
+      where.student = { ...where.student, classroomId: parseInt(kelasId) };
     if (bulan) {
-      const [tahun, bln] = bulan.split("-");
-      const nextMonth =
-        Number(bln) === 12 ? "01" : String(Number(bln) + 1).padStart(2, "0");
-      const nextYear = Number(bln) === 12 ? String(Number(tahun) + 1) : tahun;
+      const bulanInt = parseInt(bulan);
+      const tahunSekarang = new Date().getFullYear();
+      const nextMonth = bulanInt === 12 ? 1 : bulanInt + 1;
+      const nextYear = bulanInt === 12 ? tahunSekarang + 1 : tahunSekarang;
+
       where.tanggal = {
-        gte: new Date(`${tahun}-${bln}-01`),
-        lt: new Date(`${nextYear}-${nextMonth}-01`),
+        gte: new Date(tahunSekarang, bulanInt - 1, 1),
+        lt: new Date(nextYear, nextMonth - 1, 1),
       };
     }
 
@@ -179,8 +176,9 @@ const exportLaporanWK = async (req, res) => {
       tipe === "all" || !tipe
         ? "Semua"
         : tipe.charAt(0).toUpperCase() + tipe.slice(1);
-    let bulanLabel = bulan ? bulan : "Semua Bulan";
+    let bulanLabel = bulan ? getNamaBulan(parseInt(bulan)) : "Semua Bulan";
     let tahunAjaranLabel = "Semua Tahun Ajaran";
+    let kelasLabel = "Semua Kelas";
 
     if (tahunAjaranId) {
       const tahunObj = await prisma.tahunAjaran.findUnique({
@@ -188,6 +186,16 @@ const exportLaporanWK = async (req, res) => {
       });
       if (tahunObj) tahunAjaranLabel = tahunObj.tahunAjaran;
     }
+
+    if (kelasId) {
+      const kelasObj = await prisma.classroom.findUnique({
+        where: { id: parseInt(kelasId) },
+      });
+      if (kelasObj) kelasLabel = kelasObj.kodeKelas;
+    }
+
+    // Only show approved reports
+    where.status = "approved";
 
     // Fetch data
     const reports = await prisma.studentReport.findMany({
@@ -210,18 +218,18 @@ const exportLaporanWK = async (req, res) => {
         reporter: { select: { name: true } },
         tahunAjaran: { select: { tahunAjaran: true } },
       },
-      orderBy: { tanggal: "asc" },
+      orderBy: { tanggal: "desc" },
     });
 
-    // Excel export
+    // Create workbook
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Laporan Kelas");
+    const worksheet = workbook.addWorksheet("Laporan Siswa");
 
     // Title and filter info
     worksheet.mergeCells("A1:J1");
     worksheet.getCell(
       "A1"
-    ).value = `LAPORAN SISWA KELAS ${classroom.kodeKelas} - ${classroom.namaKelas}`;
+    ).value = `LAPORAN SISWA JURUSAN ${namaJurusan.toUpperCase()}`;
     worksheet.getCell("A1").font = { bold: true, size: 14 };
     worksheet.getCell("A1").alignment = {
       horizontal: "center",
@@ -231,7 +239,7 @@ const exportLaporanWK = async (req, res) => {
     worksheet.mergeCells("A2:J2");
     worksheet.getCell(
       "A2"
-    ).value = `Filter: Tipe ${tipeLabel}, Bulan ${bulanLabel}, Tahun Ajaran ${tahunAjaranLabel}`;
+    ).value = `Filter: Tipe ${tipeLabel}, Bulan ${bulanLabel}, Tahun Ajaran ${tahunAjaranLabel}, Kelas ${kelasLabel}`;
     worksheet.getCell("A2").font = { size: 11 };
     worksheet.getCell("A2").alignment = { horizontal: "center" };
 
@@ -274,7 +282,7 @@ const exportLaporanWK = async (req, res) => {
         new Date(r.tanggal).toLocaleDateString("id-ID"),
         r.student?.nisn,
         r.student?.user?.name,
-        r.student?.classroom?.kodeKelas,
+        r.student?.classroom?.kodeKelas || r.classAtTime,
         r.item?.tipe,
         r.item?.kategori?.nama,
         r.item?.nama,
@@ -324,52 +332,55 @@ const exportLaporanWK = async (req, res) => {
       { width: 20 },
     ];
 
+    // Send file
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=laporan_${kelas}_${Date.now()}.xlsx`
+      `attachment; filename=laporan_${namaJurusan}_${Date.now()}.xlsx`
     );
+
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) {
-    console.error("Export laporan WK error:", err);
-    res.status(500).json({ error: "Gagal export laporan" });
+    console.error("Export laporan Kajur error:", err);
+    res.status(500).json({ success: false, error: "Gagal export laporan" });
   }
 };
 
-// Preview poin siswa untuk kelas yang diampu wali kelas
-const previewPoinSiswaWK = async (req, res) => {
+// Preview poin siswa untuk jurusan yang diampu kajur
+const previewPoinSiswaKajur = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { bulan, tahunAjaranId } = req.query;
+    const { bulan, tahunAjaranId, kelasId } = req.query;
 
-    // Cari guru dan kelas yang diwalikan
+    // Cari guru dan jurusan yang diampu
     const teacher = await prisma.teacher.findUnique({
       where: { userId },
-      include: { classrooms: true },
+      include: { jurusan: true },
     });
 
-    if (!teacher || !teacher.classrooms.length) {
+    if (!teacher || !teacher.jurusan) {
       return res.status(404).json({
         success: false,
-        error: "Anda tidak menjadi wali kelas manapun",
+        error: "Anda tidak memiliki akses sebagai Kepala Jurusan",
       });
     }
 
-    const classroom = teacher.classrooms[0];
-    const kelas = classroom.kodeKelas;
+    const jurusanId = teacher.jurusan.id;
 
-    // Filter siswa berdasarkan kelas wali kelas
-    let where = {
+    // Setup filter untuk siswa
+    let whereStudent = {
       isArchived: false,
-      classroom: { kodeKelas: kelas },
+      classroom: { jurusanId },
     };
 
+    if (kelasId) whereStudent.classroomId = parseInt(kelasId);
+
     const students = await prisma.student.findMany({
-      where,
+      where: whereStudent,
       include: {
         user: { select: { name: true } },
         classroom: { select: { kodeKelas: true, namaKelas: true } },
@@ -403,15 +414,13 @@ const previewPoinSiswaWK = async (req, res) => {
       let filteredReports = s.reports;
       if (s.reports && Array.isArray(s.reports)) {
         if (bulan) {
-          const [tahun, bln] = bulan.split("-");
-          const nextMonth =
-            Number(bln) === 12
-              ? "01"
-              : String(Number(bln) + 1).padStart(2, "0");
-          const nextYear =
-            Number(bln) === 12 ? String(Number(tahun) + 1) : tahun;
-          const gte = new Date(`${tahun}-${bln}-01`);
-          const lt = new Date(`${nextYear}-${nextMonth}-01`);
+          const bulanInt = parseInt(bulan);
+          const tahunSekarang = new Date().getFullYear();
+          const nextMonth = bulanInt === 12 ? 1 : bulanInt + 1;
+          const nextYear = bulanInt === 12 ? tahunSekarang + 1 : tahunSekarang;
+          const gte = new Date(tahunSekarang, bulanInt - 1, 1);
+          const lt = new Date(nextYear, nextMonth - 1, 1);
+
           filteredReports = s.reports.filter(
             (r) => r.tanggal >= gte && r.tanggal < lt
           );
@@ -455,15 +464,13 @@ const previewPoinSiswaWK = async (req, res) => {
       let filteredAdjustments = s.pointAdjustments;
       if (s.pointAdjustments && Array.isArray(s.pointAdjustments)) {
         if (bulan) {
-          const [tahun, bln] = bulan.split("-");
-          const nextMonth =
-            Number(bln) === 12
-              ? "01"
-              : String(Number(bln) + 1).padStart(2, "0");
-          const nextYear =
-            Number(bln) === 12 ? String(Number(tahun) + 1) : tahun;
-          const gte = new Date(`${tahun}-${bln}-01`);
-          const lt = new Date(`${nextYear}-${nextMonth}-01`);
+          const bulanInt = parseInt(bulan);
+          const tahunSekarang = new Date().getFullYear();
+          const nextMonth = bulanInt === 12 ? 1 : bulanInt + 1;
+          const nextYear = bulanInt === 12 ? tahunSekarang + 1 : tahunSekarang;
+          const gte = new Date(tahunSekarang, bulanInt - 1, 1);
+          const lt = new Date(nextYear, nextMonth - 1, 1);
+
           filteredAdjustments = s.pointAdjustments.filter(
             (adj) => adj.tanggal >= gte && adj.tanggal < lt
           );
@@ -483,8 +490,9 @@ const previewPoinSiswaWK = async (req, res) => {
       const totalScoreWithAdjustment = totalScore + totalPoinPenanganan;
 
       return {
+        id: s.id,
         nisn: s.nisn,
-        nama: s.user?.name,
+        name: s.user?.name,
         kelas: s.classroom?.kodeKelas,
         namaKelas: s.classroom?.namaKelas,
         angkatan: s.angkatan?.tahun,
@@ -496,46 +504,51 @@ const previewPoinSiswaWK = async (req, res) => {
         totalPoinPelanggaran,
         totalPoinPrestasi,
         totalPoinPenanganan,
+        poinPelanggaran: totalPoinPelanggaran, // alias untuk kompatibilitas frontend
+        poinPrestasi: totalPoinPrestasi, // alias untuk kompatibilitas frontend
+        totalPoin: totalScoreWithAdjustment, // alias untuk kompatibilitas frontend
       };
     });
 
     res.json({ success: true, data });
   } catch (err) {
-    console.error("Preview poin siswa WK error:", err);
+    console.error("Preview poin siswa Kajur error:", err);
     res.status(500).json({ success: false, error: "Gagal preview poin siswa" });
   }
 };
 
-// Export poin siswa untuk kelas yang diampu wali kelas
-const exportPoinSiswaWK = async (req, res) => {
+// Export poin siswa untuk jurusan yang diampu kajur
+const exportPoinSiswaKajur = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { bulan, tahunAjaranId } = req.query;
+    const { bulan, tahunAjaranId, kelasId } = req.query;
 
-    // Cari guru dan kelas yang diwalikan
+    // Cari guru dan jurusan yang diampu
     const teacher = await prisma.teacher.findUnique({
       where: { userId },
-      include: { classrooms: true },
+      include: { jurusan: true },
     });
 
-    if (!teacher || !teacher.classrooms.length) {
+    if (!teacher || !teacher.jurusan) {
       return res.status(404).json({
         success: false,
-        error: "Anda tidak menjadi wali kelas manapun",
+        error: "Anda tidak memiliki akses sebagai Kepala Jurusan",
       });
     }
 
-    const classroom = teacher.classrooms[0];
-    const kelas = classroom.kodeKelas;
+    const jurusanId = teacher.jurusan.id;
+    const namaJurusan = teacher.jurusan.namaJurusan;
 
-    // Filter siswa berdasarkan kelas wali kelas
-    let where = {
+    // Setup filter untuk siswa
+    let whereStudent = {
       isArchived: false,
-      classroom: { kodeKelas: kelas },
+      classroom: { jurusanId },
     };
 
+    if (kelasId) whereStudent.classroomId = parseInt(kelasId);
+
     const students = await prisma.student.findMany({
-      where,
+      where: whereStudent,
       include: {
         user: { select: { name: true } },
         classroom: { select: { kodeKelas: true, namaKelas: true } },
@@ -556,9 +569,43 @@ const exportPoinSiswaWK = async (req, res) => {
       orderBy: { nisn: "asc" },
     });
 
+    // Setup filter untuk laporan
+    let whereReport = {
+      student: { classroom: { jurusanId } },
+    };
+
+    if (tahunAjaranId) whereReport.tahunAjaranId = parseInt(tahunAjaranId);
+    if (kelasId)
+      whereReport.student = {
+        ...whereReport.student,
+        classroomId: parseInt(kelasId),
+      };
+    if (bulan) {
+      const bulanInt = parseInt(bulan);
+      const tahunSekarang = new Date().getFullYear();
+      const nextMonth = bulanInt === 12 ? 1 : bulanInt + 1;
+      const nextYear = bulanInt === 12 ? tahunSekarang + 1 : tahunSekarang;
+
+      whereReport.tanggal = {
+        gte: new Date(tahunSekarang, bulanInt - 1, 1),
+        lt: new Date(nextYear, nextMonth - 1, 1),
+      };
+    }
+
+    // Only show approved reports
+    whereReport.status = "approved";
+
+    const reports = await prisma.studentReport.findMany({
+      where: whereReport,
+      include: {
+        item: { select: { tipe: true } },
+      },
+    });
+
     // Labels untuk filter
-    let bulanLabel = bulan ? bulan : "Semua Bulan";
+    let bulanLabel = bulan ? getNamaBulan(parseInt(bulan)) : "Semua Bulan";
     let tahunAjaranLabel = "Semua Tahun Ajaran";
+    let kelasLabel = "Semua Kelas";
 
     if (tahunAjaranId) {
       const tahunObj = await prisma.tahunAjaran.findUnique({
@@ -567,7 +614,14 @@ const exportPoinSiswaWK = async (req, res) => {
       if (tahunObj) tahunAjaranLabel = tahunObj.tahunAjaran;
     }
 
-    // Excel export
+    if (kelasId) {
+      const kelasObj = await prisma.classroom.findUnique({
+        where: { id: parseInt(kelasId) },
+      });
+      if (kelasObj) kelasLabel = kelasObj.kodeKelas;
+    }
+
+    // Create workbook
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Poin Siswa");
 
@@ -575,7 +629,7 @@ const exportPoinSiswaWK = async (req, res) => {
     worksheet.mergeCells("A1:J1");
     worksheet.getCell(
       "A1"
-    ).value = `REKAP POIN SISWA KELAS ${classroom.kodeKelas} - ${classroom.namaKelas}`;
+    ).value = `REKAP POIN SISWA JURUSAN ${namaJurusan.toUpperCase()}`;
     worksheet.getCell("A1").font = { bold: true, size: 14 };
     worksheet.getCell("A1").alignment = {
       horizontal: "center",
@@ -585,22 +639,22 @@ const exportPoinSiswaWK = async (req, res) => {
     worksheet.mergeCells("A2:J2");
     worksheet.getCell(
       "A2"
-    ).value = `Filter: Bulan ${bulanLabel}, Tahun Ajaran ${tahunAjaranLabel}`;
+    ).value = `Filter: Bulan ${bulanLabel}, Tahun Ajaran ${tahunAjaranLabel}, Kelas ${kelasLabel}`;
     worksheet.getCell("A2").font = { size: 11 };
     worksheet.getCell("A2").alignment = { horizontal: "center" };
 
     // Headers
     worksheet.addRow([]);
     const headerRow = worksheet.addRow([
+      "No",
       "NISN",
-      "Nama",
-      "Angkatan",
+      "Nama Siswa",
+      "Kelas",
       "Pelanggaran",
       "Prestasi",
       "Penanganan",
       "Poin Pelanggaran",
       "Poin Prestasi",
-      "Poin Penanganan",
       "Total Poin",
     ]);
 
@@ -616,21 +670,21 @@ const exportPoinSiswaWK = async (req, res) => {
       };
 
       // Color code headers berdasarkan kategori
-      if (colNum === 4 || colNum === 7) {
+      if (colNum === 5 || colNum === 8) {
         // Pelanggaran (merah)
         cell.fill = {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: "FFFFC7CE" },
         };
-      } else if (colNum === 5 || colNum === 8) {
+      } else if (colNum === 6 || colNum === 9) {
         // Prestasi (hijau)
         cell.fill = {
           type: "pattern",
           pattern: "solid",
           fgColor: { argb: "FFC6EFCE" },
         };
-      } else if (colNum === 6 || colNum === 9) {
+      } else if (colNum === 7) {
         // Penanganan (biru)
         cell.fill = {
           type: "pattern",
@@ -647,84 +701,105 @@ const exportPoinSiswaWK = async (req, res) => {
       }
     });
 
-    students.forEach((s) => {
-      // Calculate metrics with filtering
-      let filteredReports = s.reports;
-      let filteredAdjustments = s.pointAdjustments;
+    // Data rows
+    students.forEach((s, idx) => {
+      let pelanggaran = 0;
+      let prestasi = 0;
+      let totalScore = 0;
+      let jmlPenanganan = 0;
+      let totalPoinPelanggaran = 0;
+      let totalPoinPrestasi = 0;
+      let totalPoinPenanganan = 0;
 
-      if (bulan && s.reports) {
-        const [tahun, bln] = bulan.split("-");
-        const nextMonth =
-          Number(bln) === 12 ? "01" : String(Number(bln) + 1).padStart(2, "0");
-        const nextYear = Number(bln) === 12 ? String(Number(tahun) + 1) : tahun;
-        const gte = new Date(`${tahun}-${bln}-01`);
-        const lt = new Date(`${nextYear}-${nextMonth}-01`);
-        filteredReports = s.reports.filter(
-          (r) => r.tanggal >= gte && r.tanggal < lt
+      // Filter reports berdasarkan bulan jika ada
+      let filteredReports = s.reports;
+      if (s.reports && Array.isArray(s.reports)) {
+        if (bulan) {
+          const bulanInt = parseInt(bulan);
+          const tahunSekarang = new Date().getFullYear();
+          const nextMonth = bulanInt === 12 ? 1 : bulanInt + 1;
+          const nextYear = bulanInt === 12 ? tahunSekarang + 1 : tahunSekarang;
+          const gte = new Date(tahunSekarang, bulanInt - 1, 1);
+          const lt = new Date(nextYear, nextMonth - 1, 1);
+
+          filteredReports = s.reports.filter(
+            (r) => r.tanggal >= gte && r.tanggal < lt
+          );
+        }
+
+        pelanggaran = filteredReports.filter(
+          (r) => r.item?.tipe === "pelanggaran"
+        ).length;
+        prestasi = filteredReports.filter(
+          (r) => r.item?.tipe === "prestasi"
+        ).length;
+
+        // Total score calculation
+        totalScore = filteredReports.reduce((sum, r) => {
+          if (typeof r.pointSaat !== "number") return sum;
+          return sum + r.pointSaat;
+        }, 0);
+
+        // Total poin pelanggaran (akan negatif)
+        totalPoinPelanggaran = filteredReports.reduce(
+          (sum, r) =>
+            sum +
+            (r.item?.tipe === "pelanggaran" && typeof r.pointSaat === "number"
+              ? r.pointSaat
+              : 0),
+          0
         );
-        if (s.pointAdjustments) {
+
+        // Total poin prestasi
+        totalPoinPrestasi = filteredReports.reduce(
+          (sum, r) =>
+            sum +
+            (r.item?.tipe === "prestasi" && typeof r.pointSaat === "number"
+              ? r.pointSaat
+              : 0),
+          0
+        );
+      }
+
+      // Filter point adjustments berdasarkan bulan jika ada
+      let filteredAdjustments = s.pointAdjustments;
+      if (s.pointAdjustments && Array.isArray(s.pointAdjustments)) {
+        if (bulan) {
+          const bulanInt = parseInt(bulan);
+          const tahunSekarang = new Date().getFullYear();
+          const nextMonth = bulanInt === 12 ? 1 : bulanInt + 1;
+          const nextYear = bulanInt === 12 ? tahunSekarang + 1 : tahunSekarang;
+          const gte = new Date(tahunSekarang, bulanInt - 1, 1);
+          const lt = new Date(nextYear, nextMonth - 1, 1);
+
           filteredAdjustments = s.pointAdjustments.filter(
             (adj) => adj.tanggal >= gte && adj.tanggal < lt
           );
         }
+        jmlPenanganan = filteredAdjustments.length;
+        totalPoinPenanganan = filteredAdjustments.reduce(
+          (sum, adj) =>
+            sum +
+            (typeof adj.pointPengurangan === "number"
+              ? adj.pointPengurangan
+              : 0),
+          0
+        );
       }
 
-      const pelanggaran = filteredReports.filter(
-        (r) => r.item?.tipe === "pelanggaran"
-      ).length;
-      const prestasi = filteredReports.filter(
-        (r) => r.item?.tipe === "prestasi"
-      ).length;
-
-      const totalPoinPelanggaran = filteredReports.reduce(
-        (sum, r) =>
-          sum +
-          (r.item?.tipe === "pelanggaran" && typeof r.pointSaat === "number"
-            ? r.pointSaat // Sudah negatif di database
-            : 0),
-        0
-      );
-
-      const totalPoinPrestasi = filteredReports.reduce(
-        (sum, r) =>
-          sum +
-          (r.item?.tipe === "prestasi" && typeof r.pointSaat === "number"
-            ? r.pointSaat
-            : 0),
-        0
-      );
-
-      const jmlPenanganan = filteredAdjustments
-        ? filteredAdjustments.length
-        : 0;
-      const totalPoinPenanganan = filteredAdjustments
-        ? filteredAdjustments.reduce(
-            (sum, adj) =>
-              sum +
-              (typeof adj.pointPengurangan === "number"
-                ? adj.pointPengurangan
-                : 0),
-            0
-          )
-        : 0;
-
-      const totalScore = filteredReports.reduce((sum, r) => {
-        if (typeof r.pointSaat !== "number") return sum;
-        return sum + r.pointSaat; // Point sudah benar di database
-      }, 0);
-
+      // Total score + penanganan
       const totalScoreWithAdjustment = totalScore + totalPoinPenanganan;
 
       const row = worksheet.addRow([
+        idx + 1,
         s.nisn,
         s.user?.name,
-        s.angkatan?.tahun,
+        s.classroom?.kodeKelas,
         pelanggaran,
         prestasi,
         jmlPenanganan,
         totalPoinPelanggaran,
         totalPoinPrestasi,
-        totalPoinPenanganan,
         totalScoreWithAdjustment,
       ]);
 
@@ -735,43 +810,38 @@ const exportPoinSiswaWK = async (req, res) => {
           bottom: { style: "thin" },
           right: { style: "thin" },
         };
-        if (colNum >= 4) {
+        if (colNum === 1 || colNum >= 5) {
           cell.alignment = { horizontal: "center" };
         }
       });
 
       // Color code for each category
       // Pelanggaran (merah)
-      row.getCell(4).fill = {
+      row.getCell(5).fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFFFC7CE" },
       };
-      row.getCell(7).fill = {
+      row.getCell(8).fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFFFC7CE" },
       };
 
       // Prestasi (hijau)
-      row.getCell(5).fill = {
+      row.getCell(6).fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFC6EFCE" },
       };
-      row.getCell(8).fill = {
+      row.getCell(9).fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFC6EFCE" },
       };
 
       // Penanganan (biru)
-      row.getCell(6).fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFCCE5FF" },
-      };
-      row.getCell(9).fill = {
+      row.getCell(7).fill = {
         type: "pattern",
         pattern: "solid",
         fgColor: { argb: "FFCCE5FF" },
@@ -780,6 +850,7 @@ const exportPoinSiswaWK = async (req, res) => {
 
     // Column widths
     worksheet.columns = [
+      { width: 5 },
       { width: 12 },
       { width: 25 },
       { width: 12 },
@@ -788,30 +859,50 @@ const exportPoinSiswaWK = async (req, res) => {
       { width: 12 },
       { width: 18 },
       { width: 15 },
-      { width: 18 },
       { width: 12 },
     ];
 
+    // Send file
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=poin_siswa_${kelas}_${Date.now()}.xlsx`
+      `attachment; filename=poin_siswa_${namaJurusan}_${Date.now()}.xlsx`
     );
+
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) {
-    console.error("Export poin siswa WK error:", err);
-    res.status(500).json({ error: "Gagal export poin siswa" });
+    console.error("Export poin siswa Kajur error:", err);
+    res.status(500).json({ success: false, error: "Gagal export poin siswa" });
   }
 };
 
+// Helper function
+function getNamaBulan(bulan) {
+  const namaBulan = [
+    "Januari",
+    "Februari",
+    "Maret",
+    "April",
+    "Mei",
+    "Juni",
+    "Juli",
+    "Agustus",
+    "September",
+    "Oktober",
+    "November",
+    "Desember",
+  ];
+  return namaBulan[bulan - 1] || "Tidak Valid";
+}
+
 module.exports = {
-  getKelasInfo,
-  previewLaporanWK,
-  exportLaporanWK,
-  previewPoinSiswaWK,
-  exportPoinSiswaWK,
+  getJurusanInfo,
+  previewLaporanKajur,
+  exportLaporanKajur,
+  previewPoinSiswaKajur,
+  exportPoinSiswaKajur,
 };

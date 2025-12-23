@@ -149,14 +149,6 @@ const createClassroom = async (req, res) => {
     const { kodeKelas, namaKelas, waliKelasId, jurusanId, tingkat, rombel } =
       req.body;
 
-    console.log("Create classroom request:", {
-      kodeKelas,
-      namaKelas,
-      waliKelasId,
-      jurusanId,
-      waliKelasIdType: typeof waliKelasId,
-    });
-
     // Validate required fields
     if (!jurusanId) {
       return res.status(400).json({ error: "Jurusan is required" });
@@ -246,13 +238,6 @@ const createClassroom = async (req, res) => {
       },
     });
 
-    console.log("Created classroom:", {
-      id: classroom.id,
-      waliKelasId: classroom.waliKelasId,
-      waliKelasName: classroom.waliKelas?.user?.name,
-      jurusan: classroom.jurusan?.namaJurusan,
-    });
-
     res.status(201).json({
       id: classroom.id,
       kodeKelas: classroom.kodeKelas,
@@ -279,15 +264,6 @@ const updateClassroom = async (req, res) => {
     const { id } = req.params;
     const { kodeKelas, namaKelas, waliKelasId, jurusanId, tingkat, rombel } =
       req.body;
-
-    console.log("Update classroom request:", {
-      id,
-      kodeKelas,
-      namaKelas,
-      waliKelasId,
-      jurusanId,
-      waliKelasIdType: typeof waliKelasId,
-    });
 
     // Check if classroom exists
     const existingClassroom = await prisma.classroom.findUnique({
@@ -400,13 +376,6 @@ const updateClassroom = async (req, res) => {
           },
         },
       },
-    });
-
-    console.log("Updated classroom:", {
-      id: classroom.id,
-      waliKelasId: classroom.waliKelasId,
-      waliKelasName: classroom.waliKelas?.user?.name,
-      jurusan: classroom.jurusan?.namaJurusan,
     });
 
     res.json({

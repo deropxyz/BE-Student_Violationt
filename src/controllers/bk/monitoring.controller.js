@@ -106,19 +106,13 @@ const searchStudents = async (req, res) => {
         isArchived: false,
       },
       include: {
-        user: { select: { name: true } },
-        classroom: { select: { namaKelas: true, kodeKelas: true } },
+        user: { select: { id: true, name: true, email: true } },
+        classroom: { select: { id: true, namaKelas: true, kodeKelas: true } },
       },
       orderBy: { nisn: "asc" },
       take: 20,
     });
-    const data = students.map((siswa) => ({
-      nisn: siswa.nisn,
-      nama: siswa.user?.name,
-      kelas: siswa.classroom?.namaKelas || "-",
-      kodeKelas: siswa.classroom?.kodeKelas || "-",
-    }));
-    res.json({ data });
+    res.json(students);
   } catch (err) {
     console.error("Error searching students:", err);
     res.status(500).json({ error: "Failed to search students" });
@@ -138,7 +132,10 @@ const getClassroomWithReports = async (req, res) => {
         students: {
           include: {
             reports: {
-              where: { tahunAjaranId: activeYear.id },
+              where: {
+                tahunAjaranId: activeYear.id,
+                status: "approved", // Only count approved reports
+              },
               include: { item: true },
             },
           },
@@ -192,6 +189,7 @@ const getStudents = async (req, res) => {
       include: {
         user: { select: { name: true } },
         reports: {
+          where: { status: "approved" }, // Only include approved reports
           include: { item: true },
         },
       },
@@ -239,8 +237,11 @@ const getStudentDetailBK = async (req, res) => {
         reports: {
           where:
             tahunAjaranId && tahunAjaranId !== "all"
-              ? { tahunAjaranId: parseInt(tahunAjaranId) }
-              : {},
+              ? {
+                  tahunAjaranId: parseInt(tahunAjaranId),
+                  status: "approved", // Only include approved reports
+                }
+              : { status: "approved" }, // Default only approved
           include: {
             item: true,
             reporter: { select: { name: true, role: true } },
@@ -286,6 +287,7 @@ const getStudentDetailBK = async (req, res) => {
 
     res.json({
       siswa: {
+        id: student.id, // Tambahkan id siswa
         nisn: student.nisn,
         nama: student.user?.name,
         kelas: student.classroom?.kodeKelas,
@@ -471,6 +473,7 @@ const getStudentMonitoringDetail = async (req, res) => {
               },
             },
             reports: {
+              where: { status: "approved" }, // Only include approved reports
               take: 10,
               orderBy: { createdAt: "desc" },
               include: {

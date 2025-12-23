@@ -28,7 +28,7 @@ async function triggerSuratPeringatanSemuaSiswa() {
     console.error("[CRON] Error rekap/pengecekan surat peringatan:", err);
   }
 }
-
+//("* * * * *") untuk setiap menit
 // Jadwalkan setiap jam
 cron.schedule("0 * * * *", () => {
   console.log("[CRON] Menjalankan pengecekan surat peringatan otomatis...");

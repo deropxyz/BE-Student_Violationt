@@ -24,9 +24,10 @@ for (const tingkat of tingkatList) {
   for (const jurusan of jurusanList) {
     const key = `${tingkat}-${jurusan.kode}`;
     if (!kelasCounter[key]) kelasCounter[key] = 1;
-    const kodeKelas = `${tingkat}-${jurusan.kode}-${kelasCounter[key]}`;
+    const nomor = kelasCounter[key];
+    const kodeKelas = `${tingkat}-${jurusan.kode}-${nomor}`;
     kelasList.push({
-      namaKelas: `${tingkat} ${jurusan.kode}`,
+      namaKelas: `${tingkat} ${jurusan.kode} ${nomor}`,
       kodeKelas,
       jurusanKode: jurusan.kode,
     });

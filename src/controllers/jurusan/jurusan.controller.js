@@ -73,6 +73,9 @@ const getStudentReportsByJurusan = async (req, res) => {
       };
     }
 
+    // Only show approved reports
+    where.status = "approved";
+
     // Count total records
     const total = await prisma.studentReport.count({ where });
 
@@ -198,6 +201,9 @@ const getReportsSummaryByJurusan = async (req, res) => {
         lt: new Date(`${nextYear}-${nextMonth}-01`),
       };
     }
+
+    // Only show approved reports (applies to all queries below)
+    where.status = "approved";
 
     // Count total reports
     const totalReports = await prisma.studentReport.count({ where });
@@ -359,6 +365,9 @@ const exportReportsByJurusan = async (req, res) => {
         lt: new Date(`${nextYear}-${nextMonth}-01`),
       };
     }
+
+    // Only show approved reports
+    where.status = "approved";
 
     // Fetch reports
     const reports = await prisma.studentReport.findMany({

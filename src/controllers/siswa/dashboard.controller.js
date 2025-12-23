@@ -56,6 +56,9 @@ const getMyDashboard = async (req, res) => {
 
         // Semua laporan siswa (pelanggaran dan prestasi)
         reports: {
+          where: {
+            status: "approved",
+          },
           select: {
             id: true,
             pointSaat: true,
@@ -282,6 +285,7 @@ const getMyViolations = async (req, res) => {
       prisma.studentReport.findMany({
         where: {
           studentId: student.id,
+          status: "approved", // Only show approved reports
           item: {
             tipe: "pelanggaran",
           },
@@ -308,6 +312,7 @@ const getMyViolations = async (req, res) => {
       prisma.studentReport.count({
         where: {
           studentId: student.id,
+          status: "approved",
           item: {
             tipe: "pelanggaran",
           },
@@ -351,6 +356,7 @@ const getMyAchievements = async (req, res) => {
       prisma.studentReport.findMany({
         where: {
           studentId: student.id,
+          status: "approved", // Only show approved reports
           item: {
             tipe: "prestasi",
           },
@@ -377,6 +383,7 @@ const getMyAchievements = async (req, res) => {
       prisma.studentReport.count({
         where: {
           studentId: student.id,
+          status: "approved",
           item: {
             tipe: "prestasi",
           },

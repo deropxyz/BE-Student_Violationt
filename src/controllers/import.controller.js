@@ -1,6 +1,7 @@
 const { PrismaClient } = require("@prisma/client");
 const XLSX = require("xlsx");
 const bcrypt = require("bcrypt");
+const ExcelJS = require("exceljs");
 const prisma = new PrismaClient();
 
 // Import data from Excel

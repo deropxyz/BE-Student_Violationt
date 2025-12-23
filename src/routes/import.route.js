@@ -10,6 +10,8 @@ const {
 const {
   importPrestasiHandler,
   importPelanggaran,
+  downloadTemplatePrestasiExcel,
+  downloadTemplatePelanggaranExcel,
 } = require("../controllers/superadmin/import.controller");
 
 const { route } = require("./superadmin.route");
@@ -17,6 +19,21 @@ const { route } = require("./superadmin.route");
 const upload = multer({ dest: "uploads/" });
 
 // Import data dari Excel - hanya superadmin
+
+// Download template Excel
+router.get(
+  "/template/prestasi",
+  authenticate,
+  requireRole("superadmin", "bk"),
+  downloadTemplatePrestasiExcel
+);
+
+router.get(
+  "/template/pelanggaran",
+  authenticate,
+  requireRole("superadmin", "bk"),
+  downloadTemplatePelanggaranExcel
+);
 
 // Import Excel siswa
 router.post(

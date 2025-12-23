@@ -47,15 +47,22 @@ const login = async (req, res) => {
 
     // Cek isWaliKelas jika role guru
     let isWaliKelas = false;
+    let isKepalaJurusan = false;
     if (user.role === "guru" || user.role === "bk") {
       const teacher = await prisma.teacher.findUnique({
         where: { userId: user.id },
+        include: { jurusan: true },
       });
       if (teacher) {
         const classroom = await prisma.classroom.findFirst({
           where: { waliKelasId: teacher.id },
         });
         if (classroom) isWaliKelas = true;
+
+        // Cek apakah guru ini adalah kepala jurusan
+        if (teacher.jurusan && teacher.jurusan.kajurId === teacher.id) {
+          isKepalaJurusan = true;
+        }
       }
     }
 
@@ -67,6 +74,7 @@ const login = async (req, res) => {
         role: user.role,
         email: user.email,
         isWaliKelas,
+        isKepalaJurusan,
       },
     };
 

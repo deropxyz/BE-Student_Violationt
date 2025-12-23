@@ -437,13 +437,15 @@ const getAvailableTeachers = async (req, res) => {
           select: { id: true, name: true, email: true },
         },
       },
-      orderBy: {
-        user: { name: "asc" },
-      },
     });
 
+    // Sort by name case-insensitive in JavaScript
+    const sortedTeachers = teachers.sort((a, b) =>
+      a.user.name.toLowerCase().localeCompare(b.user.name.toLowerCase())
+    );
+
     res.json({
-      data: teachers.map((t) => ({
+      data: sortedTeachers.map((t) => ({
         id: t.id,
         name: t.user.name,
         email: t.user.email,

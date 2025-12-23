@@ -1,13 +1,34 @@
 const { PrismaClient } = require("@prisma/client");
+const {
+  paginateResponse,
+  calculatePagination,
+} = require("../../utils/paginationUtils");
 const prisma = new PrismaClient();
 
-// GET all kategori
+// GET all kategori with pagination
 const getAllKategori = async (req, res) => {
   try {
-    const kategori = await prisma.kategori.findMany({
-      include: { items: true },
-    });
-    res.json(kategori);
+    const { page = 1, limit = 50, tipe } = req.query;
+
+    const where = {};
+    if (tipe) {
+      where.tipe = tipe;
+    }
+
+    const pagination = calculatePagination(page, limit, 0);
+
+    const [kategori, total] = await prisma.$transaction([
+      prisma.kategori.findMany({
+        where,
+        include: { items: true },
+        skip: pagination.skip,
+        take: pagination.limit,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.kategori.count({ where }),
+    ]);
+
+    res.json(paginateResponse(kategori, page, limit, total));
   } catch (error) {
     res.status(500).json({ error: "gagal mengambil data kategori" });
   }

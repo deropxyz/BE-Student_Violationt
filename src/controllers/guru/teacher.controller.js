@@ -34,6 +34,9 @@ const getMyReports = async (req, res) => {
       where.tanggal = { gte: startDate, lt: endDate };
     }
 
+    // Guru melihat semua laporan mereka sendiri (pending, approved, rejected)
+    // Tidak ada filter status karena ini laporan yang dibuat oleh guru tersebut
+
     // Ambil semua laporan yang reporterId = userId tsb
     const reports = await prisma.studentReport.findMany({
       where,
@@ -55,6 +58,21 @@ const getMyReports = async (req, res) => {
       orderBy: { createdAt: "desc" },
     });
 
+    // Get validator names for reports that have validatedBy
+    const validatorIds = reports
+      .filter((r) => r.validatedBy)
+      .map((r) => r.validatedBy);
+    const uniqueValidatorIds = [...new Set(validatorIds)];
+
+    const validators = await prisma.user.findMany({
+      where: { id: { in: uniqueValidatorIds } },
+      select: { id: true, name: true },
+    });
+
+    const validatorMap = Object.fromEntries(
+      validators.map((v) => [v.id, v.name])
+    );
+
     // Map agar response hanya field yang dibutuhkan
     const mapped = reports.map((r) => ({
       id: r.id,
@@ -70,6 +88,10 @@ const getMyReports = async (req, res) => {
       tahunAjaran: r.tahunAjaran?.tahunAjaran || "-",
       bukti: r.bukti,
       classAtTime: r.classAtTime || "-",
+      status: r.status, // pending, approved, rejected
+      validatedBy: r.validatedBy ? validatorMap[r.validatedBy] : null,
+      validatedAt: r.validatedAt,
+      rejectionNote: r.rejectionNote,
     }));
 
     res.json({ success: true, data: mapped });
@@ -107,6 +129,17 @@ const getReportDetail = async (req, res) => {
     if (!report) {
       return res.status(404).json({ message: "Laporan tidak ditemukan" });
     }
+
+    // Get validator name if exists
+    let validatorName = null;
+    if (report.validatedBy) {
+      const validator = await prisma.user.findUnique({
+        where: { id: report.validatedBy },
+        select: { name: true },
+      });
+      validatorName = validator?.name;
+    }
+
     // Format response hanya field penting
     res.json({
       success: true,
@@ -127,6 +160,10 @@ const getReportDetail = async (req, res) => {
         tipe: report.item?.tipe || "-",
         tahunAjaran: report.tahunAjaran?.tahunAjaran || "-",
         bukti: report.bukti,
+        status: report.status,
+        validatedBy: validatorName,
+        validatedAt: report.validatedAt,
+        rejectionNote: report.rejectionNote,
         createdAt: report.createdAt,
         updatedAt: report.updatedAt,
       },

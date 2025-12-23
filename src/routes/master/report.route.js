@@ -7,6 +7,7 @@ const {
   updateStudentReport,
   deleteStudentReport,
   recalculateAllTotalScores,
+  validateReport,
 } = require("../../controllers/Master/report.controller");
 
 const {
@@ -52,6 +53,16 @@ router.delete(
   authenticate,
   requireRole("bk", "superadmin"),
   deleteStudentReport
+);
+
+// ==================== VALIDATION ROUTES (BK ONLY) ====================
+
+// Validate (approve/reject) report - Only BK can validate
+router.post(
+  "/report/:reportId/validate",
+  authenticate,
+  requireRole("bk", "superadmin"),
+  validateReport
 );
 
 // ==================== POINT ADJUSTMENT ROUTES (BK ONLY) ====================

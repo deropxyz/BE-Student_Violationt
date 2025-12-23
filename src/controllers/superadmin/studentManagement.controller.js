@@ -26,7 +26,7 @@ const getAllClassrooms = async (req, res) => {
             },
           },
         },
-        orderBy: { namaKelas: "desc" },
+        orderBy: { namaKelas: "asc" },
       }),
       prisma.classroom.count(),
     ]);
@@ -180,6 +180,7 @@ const getStudentsByClassroom = async (req, res) => {
         include: {
           student: {
             select: {
+              id: true, // Include Student ID
               nisn: true,
               noHp: true,
               gender: true,
@@ -222,7 +223,8 @@ const getStudentsByClassroom = async (req, res) => {
     ]);
 
     const formattedStudents = students.map((user) => ({
-      id: user.id,
+      id: user.student?.id || user.id, // Student ID (bukan User ID)
+      userId: user.id, // User ID for reference
       nisn: user.student?.nisn || null,
       nama: user.name,
       email: user.email,
@@ -502,6 +504,11 @@ const getStudentDetail = async (req, res) => {
 // Update student data
 const updateStudent = async (req, res) => {
   try {
+    console.log("=== UPDATE STUDENT CALLED ===");
+    console.log("Params:", req.params);
+    console.log("Body:", req.body);
+    console.log("User:", req.user);
+
     const { studentId } = req.params;
     const {
       nisn,
@@ -524,7 +531,12 @@ const updateStudent = async (req, res) => {
       include: { user: true },
     });
 
+    console.log("=== EXISTING STUDENT ===");
+    console.log("Searched ID:", parseInt(studentId));
+    console.log("Found:", existingStudent);
+
     if (!existingStudent) {
+      console.log("=== STUDENT NOT FOUND - RETURNING 404 ===");
       return res.status(404).json({ error: "Student not found" });
     }
 

@@ -102,6 +102,7 @@ const getReportsInMyClass = async (req, res) => {
     const classroom = teacher.classrooms[0];
     // Filter search by nama/nisn
     const whereClause = {
+      status: "approved", // Only show approved reports
       student: {
         classroomId: classroom.id,
         ...(search && {

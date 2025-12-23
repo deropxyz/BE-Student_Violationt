@@ -77,15 +77,7 @@ const generateKenaikanKelas = async (req, res) => {
           where: { namaKelas: { startsWith: "XII" } },
         });
 
-        // Debug: Log available classes
-        console.log(
-          "Available XI classes:",
-          kelasXI.map((k) => k.namaKelas)
-        );
-        console.log(
-          "Available XII classes:",
-          kelasXII.map((k) => k.namaKelas)
-        ); // Promote Grade X to XI (using batch processing)
+        // Promote Grade X to XI (using batch processing)
         const batchSize = 50;
 
         for (let i = 0; i < siswaKelas10.length; i += batchSize) {
@@ -95,46 +87,60 @@ const generateKenaikanKelas = async (req, res) => {
             const shouldPromote =
               promoteAll ||
               customPromotions.includes(siswa.id) ||
-              siswa.totalScore >= -200; // Default promotion criteria
+              siswa.totalScore >= -300; // Siswa tinggal kelas jika total skor < -300
 
             if (shouldPromote) {
-              // Find corresponding XI class
-              const targetKelas = kelasXI.find(
-                (k) =>
-                  k.namaKelas.replace("XI", "").trim() ===
-                  siswa.classroom.namaKelas.replace("X", "").trim()
-              );
-
-              console.log(
-                `Looking for XI class for ${siswa.classroom.namaKelas}, found:`,
-                targetKelas?.namaKelas
-              );
-
-              if (targetKelas) {
-                await tx.student.update({
-                  where: { id: siswa.id },
-                  data: { classroomId: targetKelas.id },
-                });
-
-                totalPromoted++;
-                promotionDetails.push({
-                  studentId: siswa.id,
-                  name: siswa.user.name,
-                  from: siswa.classroom.namaKelas,
-                  to: targetKelas.namaKelas,
-                  type: "promoted",
-                });
-              } else {
-                console.log(
-                  `No XI class found for ${siswa.classroom.namaKelas}`
+              // Find corresponding XI class using kodeKelas
+              // Extract jurusan dari kodeKelas (e.g., "X-TPM-1" -> "TPM-1")
+              const kodeKelasParts = siswa.classroom.kodeKelas.split("-");
+              if (kodeKelasParts.length >= 2) {
+                // Rebuild dengan tingkat XI (e.g., "TPM-1" -> "XI-TPM-1")
+                const targetKodeKelas = `XI-${kodeKelasParts
+                  .slice(1)
+                  .join("-")}`;
+                const targetKelas = kelasXI.find(
+                  (k) => k.kodeKelas === targetKodeKelas
                 );
+
+                if (targetKelas) {
+                  await tx.student.update({
+                    where: { id: siswa.id },
+                    data: { classroomId: targetKelas.id },
+                  });
+
+                  totalPromoted++;
+                  promotionDetails.push({
+                    studentId: siswa.id,
+                    name: siswa.user.name,
+                    nisn: siswa.nisn,
+                    from: siswa.classroom.namaKelas,
+                    to: targetKelas.namaKelas,
+                    type: "promoted",
+                    totalScore: siswa.totalScore,
+                  });
+                } else {
+                  totalFailed++;
+                  promotionDetails.push({
+                    studentId: siswa.id,
+                    name: siswa.user.name,
+                    nisn: siswa.nisn,
+                    from: siswa.classroom.namaKelas,
+                    to: siswa.classroom.namaKelas,
+                    type: "no_target_class",
+                    totalScore: siswa.totalScore,
+                  });
+                }
+              } else {
+                // Jika format kodeKelas tidak valid
                 totalFailed++;
                 promotionDetails.push({
                   studentId: siswa.id,
                   name: siswa.user.name,
+                  nisn: siswa.nisn,
                   from: siswa.classroom.namaKelas,
                   to: siswa.classroom.namaKelas,
                   type: "no_target_class",
+                  totalScore: siswa.totalScore,
                 });
               }
             } else {
@@ -142,9 +148,11 @@ const generateKenaikanKelas = async (req, res) => {
               promotionDetails.push({
                 studentId: siswa.id,
                 name: siswa.user.name,
+                nisn: siswa.nisn,
                 from: siswa.classroom.namaKelas,
                 to: siswa.classroom.namaKelas,
                 type: "repeat",
+                totalScore: siswa.totalScore,
               });
             }
           }
@@ -158,45 +166,60 @@ const generateKenaikanKelas = async (req, res) => {
             const shouldPromote =
               promoteAll ||
               customPromotions.includes(siswa.id) ||
-              siswa.totalScore >= -200;
+              siswa.totalScore >= -300; // Siswa tinggal kelas jika total skor < -300
 
             if (shouldPromote) {
-              const targetKelas = kelasXII.find(
-                (k) =>
-                  k.namaKelas.replace("XII", "").trim() ===
-                  siswa.classroom.namaKelas.replace("XI", "").trim()
-              );
-
-              console.log(
-                `Looking for XII class for ${siswa.classroom.namaKelas}, found:`,
-                targetKelas?.namaKelas
-              );
-
-              if (targetKelas) {
-                await tx.student.update({
-                  where: { id: siswa.id },
-                  data: { classroomId: targetKelas.id },
-                });
-
-                totalPromoted++;
-                promotionDetails.push({
-                  studentId: siswa.id,
-                  name: siswa.user.name,
-                  from: siswa.classroom.namaKelas,
-                  to: targetKelas.namaKelas,
-                  type: "promoted",
-                });
-              } else {
-                console.log(
-                  `No XII class found for ${siswa.classroom.namaKelas}`
+              // Find corresponding XII class using kodeKelas
+              // Extract jurusan dari kodeKelas (e.g., "XI-TPM-1" -> "TPM-1")
+              const kodeKelasParts = siswa.classroom.kodeKelas.split("-");
+              if (kodeKelasParts.length >= 2) {
+                // Rebuild dengan tingkat XII (e.g., "TPM-1" -> "XII-TPM-1")
+                const targetKodeKelas = `XII-${kodeKelasParts
+                  .slice(1)
+                  .join("-")}`;
+                const targetKelas = kelasXII.find(
+                  (k) => k.kodeKelas === targetKodeKelas
                 );
+
+                if (targetKelas) {
+                  await tx.student.update({
+                    where: { id: siswa.id },
+                    data: { classroomId: targetKelas.id },
+                  });
+
+                  totalPromoted++;
+                  promotionDetails.push({
+                    studentId: siswa.id,
+                    name: siswa.user.name,
+                    nisn: siswa.nisn,
+                    from: siswa.classroom.namaKelas,
+                    to: targetKelas.namaKelas,
+                    type: "promoted",
+                    totalScore: siswa.totalScore,
+                  });
+                } else {
+                  totalFailed++;
+                  promotionDetails.push({
+                    studentId: siswa.id,
+                    name: siswa.user.name,
+                    nisn: siswa.nisn,
+                    from: siswa.classroom.namaKelas,
+                    to: siswa.classroom.namaKelas,
+                    type: "no_target_class",
+                    totalScore: siswa.totalScore,
+                  });
+                }
+              } else {
+                // Jika format kodeKelas tidak valid
                 totalFailed++;
                 promotionDetails.push({
                   studentId: siswa.id,
                   name: siswa.user.name,
+                  nisn: siswa.nisn,
                   from: siswa.classroom.namaKelas,
                   to: siswa.classroom.namaKelas,
                   type: "no_target_class",
+                  totalScore: siswa.totalScore,
                 });
               }
             } else {
@@ -204,9 +227,11 @@ const generateKenaikanKelas = async (req, res) => {
               promotionDetails.push({
                 studentId: siswa.id,
                 name: siswa.user.name,
+                nisn: siswa.nisn,
                 from: siswa.classroom.namaKelas,
                 to: siswa.classroom.namaKelas,
                 type: "repeat",
+                totalScore: siswa.totalScore,
               });
             }
           }
@@ -220,7 +245,7 @@ const generateKenaikanKelas = async (req, res) => {
             const shouldGraduate =
               promoteAll ||
               customPromotions.includes(siswa.id) ||
-              siswa.totalScore >= -200;
+              siswa.totalScore >= -300; // Siswa lulus jika total skor >= -300
 
             if (shouldGraduate) {
               await tx.student.update({
@@ -236,18 +261,22 @@ const generateKenaikanKelas = async (req, res) => {
               promotionDetails.push({
                 studentId: siswa.id,
                 name: siswa.user.name,
+                nisn: siswa.nisn,
                 from: siswa.classroom.namaKelas,
                 to: "LULUS",
                 type: "graduated",
+                totalScore: siswa.totalScore,
               });
             } else {
               totalFailed++;
               promotionDetails.push({
                 studentId: siswa.id,
                 name: siswa.user.name,
+                nisn: siswa.nisn,
                 from: siswa.classroom.namaKelas,
                 to: siswa.classroom.namaKelas,
                 type: "repeat",
+                totalScore: siswa.totalScore,
               });
             }
           }
@@ -264,6 +293,22 @@ const generateKenaikanKelas = async (req, res) => {
             gagal: totalFailed,
           },
         });
+
+        // Save promotion details to database
+        if (promotionDetails.length > 0) {
+          await tx.kenaikanKelasDetail.createMany({
+            data: promotionDetails.map((detail) => ({
+              kenaikanKelasId: kenaikanKelas.id,
+              studentId: detail.studentId,
+              studentName: detail.name,
+              nisn: detail.nisn,
+              fromClass: detail.from,
+              toClass: detail.to,
+              type: detail.type,
+              totalScore: detail.totalScore,
+            })),
+          });
+        }
 
         return {
           kenaikanKelas,
@@ -330,7 +375,7 @@ const getPromotionPreview = async (req, res) => {
         nisn: s.nisn,
         currentClass: s.classroom.namaKelas,
         totalScore: s.totalScore,
-        eligible: s.totalScore >= -200,
+        eligible: s.totalScore >= -300,
         nextGrade: "XI",
       })),
       gradeXI: siswaKelas11.map((s) => ({
@@ -339,7 +384,7 @@ const getPromotionPreview = async (req, res) => {
         nisn: s.nisn,
         currentClass: s.classroom.namaKelas,
         totalScore: s.totalScore,
-        eligible: s.totalScore >= -200,
+        eligible: s.totalScore >= -300,
         nextGrade: "XII",
       })),
       gradeXII: siswaKelas12.map((s) => ({
@@ -348,7 +393,7 @@ const getPromotionPreview = async (req, res) => {
         nisn: s.nisn,
         currentClass: s.classroom.namaKelas,
         totalScore: s.totalScore,
-        eligible: s.totalScore >= -200,
+        eligible: s.totalScore >= -300,
         nextGrade: "LULUS",
       })),
     };
@@ -360,9 +405,9 @@ const getPromotionPreview = async (req, res) => {
         totalX: siswaKelas10.length,
         totalXI: siswaKelas11.length,
         totalXII: siswaKelas12.length,
-        eligibleX: siswaKelas10.filter((s) => s.totalScore >= -200).length,
-        eligibleXI: siswaKelas11.filter((s) => s.totalScore >= -200).length,
-        eligibleXII: siswaKelas12.filter((s) => s.totalScore >= -200).length,
+        eligibleX: siswaKelas10.filter((s) => s.totalScore >= -300).length,
+        eligibleXI: siswaKelas11.filter((s) => s.totalScore >= -300).length,
+        eligibleXII: siswaKelas12.filter((s) => s.totalScore >= -300).length,
       },
     });
   } catch (err) {
@@ -487,6 +532,15 @@ const getKenaikanKelasDetail = async (req, res) => {
   try {
     const record = await prisma.kenaikanKelas.findUnique({
       where: { id: parseInt(id) },
+      include: {
+        details: {
+          orderBy: [
+            { type: "asc" },
+            { fromClass: "asc" },
+            { studentName: "asc" },
+          ],
+        },
+      },
     });
 
     if (!record) {
@@ -497,6 +551,7 @@ const getKenaikanKelasDetail = async (req, res) => {
 
     res.json(record);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Gagal mengambil detail kenaikan kelas" });
   }
 };

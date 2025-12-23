@@ -19,11 +19,12 @@ async function rekapTotalScoreStudent(studentId) {
     where: { isActive: true },
   });
   if (!activeYear) throw new Error("Tidak ada tahun ajaran aktif");
-  // Hitung total dari semua report di tahun ajaran aktif
+  // Hitung total dari semua report APPROVED di tahun ajaran aktif
   const reports = await prisma.studentReport.findMany({
     where: {
       studentId: parseInt(studentId),
       tahunAjaranId: activeYear.id,
+      status: "approved", // Only count approved reports
     },
     include: { item: { select: { tipe: true } } },
   });
@@ -68,6 +69,7 @@ const getAllStudentReports = async (req, res) => {
       kategoriId,
       jenis,
       tahunAjaranId, // Filter by academic year
+      status, // pending, approved, rejected
     } = req.query;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -75,6 +77,15 @@ const getAllStudentReports = async (req, res) => {
     // Build where clause
     const where = {};
     if (studentId) where.studentId = parseInt(studentId);
+
+    // Filter by status - default approved unless explicitly specified
+    // This ensures only validated reports are shown in general views
+    if (status) {
+      where.status = status;
+    } else {
+      // Default: only show approved reports
+      where.status = "approved";
+    }
 
     // Filter search by nama siswa atau nisn
     if (req.query.search) {
@@ -181,6 +192,13 @@ const getAllStudentReports = async (req, res) => {
         jenis: r.item.jenis,
         point: r.item.point,
       },
+      // Flat properties for easier access
+      siswa: r.student.user.name,
+      nisn: r.student.nisn,
+      kelas: r.student.classroom?.namaKelas,
+      namaItem: r.item.nama,
+      tipe: r.item.tipe,
+      point: r.item.point,
       tanggal: r.tanggal,
       waktu: r.waktu,
       deskripsi: r.deskripsi,
@@ -188,6 +206,10 @@ const getAllStudentReports = async (req, res) => {
       pointSaat: r.pointSaat,
       reporter: r.reporter.name,
       reporterRole: r.reporter.role,
+      status: r.status,
+      validatedBy: r.validatedBy,
+      validatedAt: r.validatedAt,
+      rejectionNote: r.rejectionNote,
       createdAt: r.createdAt,
     }));
 
@@ -384,6 +406,13 @@ const createStudentReport = async (req, res) => {
       }
     }
 
+    // Determine status based on reporter role
+    // BK and Superadmin reports are auto-approved
+    // Guru reports need validation
+    const userRole = req.user.role;
+    const initialStatus = userRole === "guru" ? "pending" : "approved";
+    const needsValidation = userRole === "guru";
+
     // Create student report record
     const studentReport = await prisma.studentReport.create({
       data: {
@@ -392,11 +421,14 @@ const createStudentReport = async (req, res) => {
         itemId: parseInt(itemId),
         tahunAjaranId: activeYear.id,
         tanggal: new Date(tanggal),
-        waktu: waktu ? new Date(waktu) : null,
+        waktu: parsedWaktu,
         deskripsi,
         pointSaat: reportItem.point,
         classAtTime: student.classroom ? student.classroom.namaKelas : "-",
-        bukti: buktiPath, // simpan path file di sini
+        bukti: buktiPath,
+        status: initialStatus,
+        validatedBy: initialStatus === "approved" ? reporterId : null,
+        validatedAt: initialStatus === "approved" ? new Date() : null,
       },
       include: {
         student: { include: { user: true, classroom: true } },
@@ -405,47 +437,59 @@ const createStudentReport = async (req, res) => {
       },
     });
 
-    // Get old total score before recalculation
-    const oldTotalScore = student.totalScore;
-    // Update student total score (rekap ulang)
-    const newTotalScore = await rekapTotalScoreStudent(studentId);
+    // Only update score if auto-approved (BK/Superadmin)
+    let newTotalScore = student.totalScore;
+    let oldTotalScore = student.totalScore;
 
-    // Trigger automasi surat peringatan jika ini adalah pelanggaran
-    if (reportItem.tipe === "pelanggaran") {
-      await checkAndTriggerSuratPeringatan(
-        studentId,
-        newTotalScore,
-        oldTotalScore
-      );
+    if (!needsValidation) {
+      // Get old total score before recalculation
+      oldTotalScore = student.totalScore;
+      // Update student total score (rekap ulang)
+      newTotalScore = await rekapTotalScoreStudent(studentId);
+
+      // Trigger automasi surat peringatan jika ini adalah pelanggaran
+      if (reportItem.tipe === "pelanggaran") {
+        await checkAndTriggerSuratPeringatan(
+          studentId,
+          newTotalScore,
+          oldTotalScore
+        );
+      }
+
+      // Create notification for student ONLY if auto-approved (BK/Superadmin)
+      // For guru reports, notification will be sent when BK approves
+      const notificationTitle =
+        reportItem.tipe === "pelanggaran"
+          ? "Pelanggaran Baru"
+          : "Prestasi Baru";
+      const notificationMessage =
+        reportItem.tipe === "pelanggaran"
+          ? `Anda telah melakukan pelanggaran: ${reportItem.nama}. Poin: -${reportItem.point}`
+          : `Selamat! Anda meraih prestasi: ${reportItem.nama}. Poin: +${reportItem.point}`;
+
+      await prisma.notification.create({
+        data: {
+          studentId: parseInt(studentId),
+          judul: notificationTitle,
+          pesan: notificationMessage,
+          isRead: false,
+        },
+      });
     }
-
-    // Create score history
-    const newScore = newTotalScore;
-
-    // Create notification for student
-    const notificationTitle =
-      reportItem.tipe === "pelanggaran" ? "Pelanggaran Baru" : "Prestasi Baru";
-    const notificationMessage =
-      reportItem.tipe === "pelanggaran"
-        ? `Anda telah melakukan pelanggaran: ${reportItem.nama}. Poin: -${reportItem.point}`
-        : `Selamat! Anda meraih prestasi: ${reportItem.nama}. Poin: +${reportItem.point}`;
-
-    await prisma.notification.create({
-      data: {
-        studentId: parseInt(studentId),
-        judul: notificationTitle,
-        pesan: notificationMessage,
-        isRead: false,
-      },
-    });
 
     res.status(201).json({
       success: true,
-      message: `Laporan ${
-        reportItem.tipe === "pelanggaran" ? "pelanggaran" : "prestasi"
-      } berhasil dibuat`,
+      message: needsValidation
+        ? `Laporan ${
+            reportItem.tipe === "pelanggaran" ? "pelanggaran" : "prestasi"
+          } berhasil dibuat dan menunggu validasi BK`
+        : `Laporan ${
+            reportItem.tipe === "pelanggaran" ? "pelanggaran" : "prestasi"
+          } berhasil dibuat`,
       data: {
         id: studentReport.id,
+        status: studentReport.status,
+        needsValidation,
         student: {
           nama: studentReport.student.user.name,
           nisn: studentReport.student.nisn,
@@ -615,16 +659,9 @@ const deleteStudentReport = async (req, res) => {
         ? existingReport.bukti.slice(1)
         : existingReport.bukti;
       const buktiPath = path.join(process.cwd(), relativePath);
-      console.log("[Delete Report] Akan hapus file bukti:", buktiPath);
       try {
         if (fs.existsSync(buktiPath)) {
           fs.unlinkSync(buktiPath);
-          console.log("[Delete Report] File bukti berhasil dihapus.");
-        } else {
-          console.warn(
-            "[Delete Report] File bukti tidak ditemukan:",
-            buktiPath
-          );
         }
       } catch (e) {
         // Log error, tapi lanjutkan proses hapus report
@@ -657,8 +694,6 @@ const recalculateAllTotalScores = async (req, res) => {
         user: { select: { name: true } },
       },
     });
-
-    console.log(`Starting recalculation for ${students.length} students...`);
 
     let updatedCount = 0;
     const results = [];
@@ -700,10 +735,6 @@ const recalculateAllTotalScores = async (req, res) => {
           difference: correctTotalScore - currentTotalScore,
           totalReports: reports.length,
         });
-
-        console.log(
-          `Updated ${student.user.name}: ${currentTotalScore} → ${correctTotalScore}`
-        );
       }
     }
 
@@ -719,6 +750,161 @@ const recalculateAllTotalScores = async (req, res) => {
   }
 };
 
+// Validate report (approve/reject) - Only BK
+const validateReport = async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const { action, rejectionNote } = req.body; // action: "approve" or "reject"
+    const validatorId = req.user.id;
+
+    if (!action || !["approve", "reject"].includes(action)) {
+      return res.status(400).json({
+        error: "Action harus 'approve' atau 'reject'",
+      });
+    }
+
+    if (action === "reject" && !rejectionNote) {
+      return res.status(400).json({
+        error: "Catatan penolakan wajib diisi saat menolak laporan",
+      });
+    }
+
+    // Get report with full details
+    const report = await prisma.studentReport.findUnique({
+      where: { id: parseInt(reportId) },
+      include: {
+        student: {
+          include: {
+            user: true,
+            classroom: true,
+          },
+        },
+        item: {
+          include: {
+            kategori: true,
+          },
+        },
+        reporter: {
+          select: {
+            name: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!report) {
+      return res.status(404).json({ error: "Laporan tidak ditemukan" });
+    }
+
+    if (report.status !== "pending") {
+      return res.status(400).json({
+        error: `Laporan sudah ${report.status}`,
+        message: "Hanya laporan dengan status pending yang bisa divalidasi",
+      });
+    }
+
+    const newStatus = action === "approve" ? "approved" : "rejected";
+
+    // Update report status
+    const updatedReport = await prisma.studentReport.update({
+      where: { id: parseInt(reportId) },
+      data: {
+        status: newStatus,
+        validatedBy: validatorId,
+        validatedAt: new Date(),
+        rejectionNote: action === "reject" ? rejectionNote : null,
+      },
+      include: {
+        student: {
+          include: {
+            user: true,
+            classroom: true,
+          },
+        },
+        item: {
+          include: {
+            kategori: true,
+          },
+        },
+        reporter: {
+          select: {
+            name: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    // If approved, update student score and send notification
+    if (action === "approve") {
+      // Get old total score before recalculation
+      const oldTotalScore = report.student.totalScore;
+
+      // Update student total score (rekap ulang)
+      const newTotalScore = await rekapTotalScoreStudent(report.studentId);
+
+      // Trigger automasi surat peringatan jika ini adalah pelanggaran
+      if (report.item.tipe === "pelanggaran") {
+        await checkAndTriggerSuratPeringatan(
+          report.studentId,
+          newTotalScore,
+          oldTotalScore
+        );
+      }
+
+      // Create notification for student
+      const notificationTitle =
+        report.item.tipe === "pelanggaran"
+          ? "Laporan Pelanggaran Disetujui"
+          : "Laporan Prestasi Disetujui";
+      const notificationMessage =
+        report.item.tipe === "pelanggaran"
+          ? `Laporan pelanggaran Anda telah disetujui: ${report.item.nama}. Poin: -${report.item.point}`
+          : `Selamat! Laporan prestasi Anda telah disetujui: ${report.item.nama}. Poin: +${report.item.point}`;
+
+      await prisma.notification.create({
+        data: {
+          studentId: report.studentId,
+          judul: notificationTitle,
+          pesan: notificationMessage,
+          isRead: false,
+        },
+      });
+    } else {
+      // If rejected, no notification for student (report rejected)
+      // Only guru can see the rejection in their report list
+    }
+
+    res.json({
+      success: true,
+      message:
+        action === "approve"
+          ? "Laporan berhasil disetujui"
+          : "Laporan berhasil ditolak",
+      data: {
+        id: updatedReport.id,
+        status: updatedReport.status,
+        validatedAt: updatedReport.validatedAt,
+        rejectionNote: updatedReport.rejectionNote,
+        student: {
+          nama: updatedReport.student.user.name,
+          nisn: updatedReport.student.nisn,
+          kelas: updatedReport.student.classroom?.namaKelas,
+        },
+        item: {
+          nama: updatedReport.item.nama,
+          tipe: updatedReport.item.tipe,
+          point: updatedReport.item.point,
+        },
+      },
+    });
+  } catch (err) {
+    console.error("Error validating report:", err);
+    res.status(500).json({ error: "Gagal memvalidasi laporan" });
+  }
+};
+
 module.exports = {
   // New Student Report Functions (Combined)
   getAllStudentReports,
@@ -726,6 +912,9 @@ module.exports = {
   createStudentReport,
   updateStudentReport,
   deleteStudentReport,
+
+  // Validation Functions
+  validateReport,
 
   // Utility Functions
   recalculateAllTotalScores,

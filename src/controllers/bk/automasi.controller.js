@@ -154,10 +154,6 @@ const createSuratPeringatan = async (
       },
     });
 
-    console.log(
-      `Surat peringatan ${config.jenisSurat} dibuat untuk siswa ${student.user.name} (Score: ${totalScore})`
-    );
-
     return suratPeringatan;
   } catch (error) {
     console.error("Error creating surat peringatan:", error);

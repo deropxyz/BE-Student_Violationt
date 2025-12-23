@@ -26,6 +26,7 @@ const getSuperadminDashboard = async (req, res) => {
         where: { isActive: true },
       }),
       prisma.studentReport.findMany({
+        where: { status: "approved" }, // Only show approved reports
         include: {
           student: {
             include: {
@@ -111,7 +112,7 @@ const getSuperadminStatsByAcademicYear = async (req, res) => {
       prisma.violation.count(),
       prisma.achievement.count(),
       prisma.studentReport.count({
-        where: { tanggal: dateFilter },
+        where: { tanggal: dateFilter, status: "approved" },
       }),
       prisma.user.count({
         where: { isActive: true },
@@ -120,16 +121,18 @@ const getSuperadminStatsByAcademicYear = async (req, res) => {
         where: {
           tipe: "violation",
           tanggal: dateFilter,
+          status: "approved",
         },
       }),
       prisma.studentReport.count({
         where: {
           tipe: "achievement",
           tanggal: dateFilter,
+          status: "approved",
         },
       }),
       prisma.studentReport.findMany({
-        where: { tanggal: dateFilter },
+        where: { tanggal: dateFilter, status: "approved" },
         select: {
           tipe: true,
           tanggal: true,
@@ -139,7 +142,7 @@ const getSuperadminStatsByAcademicYear = async (req, res) => {
       // Reports by type (violations and achievements)
       prisma.studentReport.groupBy({
         by: ["tipe"],
-        where: { tanggal: dateFilter },
+        where: { tanggal: dateFilter, status: "approved" },
         _count: {
           id: true,
         },
@@ -224,7 +227,7 @@ const getSystemAnalyticsByAcademicYear = async (req, res) => {
 
     // Get recent reports for the academic year
     const recentReports = await prisma.studentReport.findMany({
-      where: { tanggal: dateFilter },
+      where: { tanggal: dateFilter, status: "approved" },
       include: {
         student: {
           include: {

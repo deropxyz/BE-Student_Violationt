@@ -1,15 +1,37 @@
 const { PrismaClient } = require("@prisma/client");
+const {
+  paginateResponse,
+  calculatePagination,
+} = require("../../utils/paginationUtils");
 const prisma = new PrismaClient();
 
-// Ambil semua data prestasi
+// Ambil semua data prestasi with pagination
 const getAllAchievements = async (req, res) => {
   try {
-    const achievements = await prisma.reportItem.findMany({
-      where: { tipe: "prestasi" },
-      include: { kategori: true },
-      orderBy: [{ kategoriId: "asc" }, { point: "asc" }],
-    });
-    res.json(achievements);
+    const { page = 1, limit = 50, kategoriId, isActive } = req.query;
+
+    const where = { tipe: "prestasi" };
+    if (kategoriId) {
+      where.kategoriId = parseInt(kategoriId);
+    }
+    if (isActive !== undefined) {
+      where.isActive = isActive === "true";
+    }
+
+    const pagination = calculatePagination(page, limit, 0);
+
+    const [achievements, total] = await prisma.$transaction([
+      prisma.reportItem.findMany({
+        where,
+        include: { kategori: true },
+        orderBy: [{ kategoriId: "asc" }, { point: "asc" }],
+        skip: pagination.skip,
+        take: pagination.limit,
+      }),
+      prisma.reportItem.count({ where }),
+    ]);
+
+    res.json(paginateResponse(achievements, page, limit, total));
   } catch (err) {
     res.status(500).json({ error: "Gagal mengambil data prestasi" });
   }

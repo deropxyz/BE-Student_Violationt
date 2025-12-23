@@ -38,6 +38,7 @@ model User {
   teacher        Teacher?
   studentReports StudentReport[]   @relation("ReportReporter")
   bkAdjustments  PointAdjustment[] @relation("BKAdjustment")
+  konsultasi     Konsultasi[]      @relation("KonsultasiBK")
 }
 
 model Student {
@@ -67,6 +68,7 @@ model Student {
   scoreHistory     ScoreHistory[]
   suratPeringatan  SuratPeringatan[]
   pointAdjustments PointAdjustment[]
+  konsultasi       Konsultasi[]
 }
 
 model Teacher {
@@ -162,8 +164,18 @@ model StudentReport {
   waktu     DateTime? // waktu kejadian lebih detail
   deskripsi String?
   pointSaat Int
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+
+  // Validasi laporan
+  status        String    @default("pending") // "pending", "approved", "rejected"
+  validatedBy   Int? // ID user BK yang validasi
+  validatedAt   DateTime? // Waktu validasi
+  rejectionNote String? // Catatan penolakan jika ditolak
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([reporterId])
 }
 
 model Notification {
@@ -235,6 +247,30 @@ model KenaikanKelas {
   gagal      Int
 
   createdAt DateTime @default(now())
+
+  // Relasi dengan detail kenaikan kelas
+  details KenaikanKelasDetail[]
+}
+
+// Model untuk menyimpan detail siswa dalam kenaikan kelas
+model KenaikanKelasDetail {
+  id              Int           @id @default(autoincrement())
+  kenaikanKelas   KenaikanKelas @relation(fields: [kenaikanKelasId], references: [id], onDelete: Cascade)
+  kenaikanKelasId Int
+
+  studentId   Int
+  studentName String
+  nisn        String
+  fromClass   String // Kelas asal
+  toClass     String // Kelas tujuan
+  type        String // "promoted", "graduated", "repeat", "no_target_class"
+  totalScore  Int // Total score siswa saat kenaikan kelas
+
+  createdAt DateTime @default(now())
+
+  @@index([kenaikanKelasId])
+  @@index([studentId])
+  @@index([type])
 }
 
 // Tabel untuk menyimpan histori perubahan score siswa
@@ -296,4 +332,24 @@ model PointAdjustment {
   @@index([teacherId])
   @@index([tanggal])
   @@index([tahunAjaranId])
+}
+
+// Model untuk konsultasi BK dengan siswa
+model Konsultasi {
+  id        Int     @id @default(autoincrement())
+  student   Student @relation(fields: [studentId], references: [id])
+  studentId Int
+  bk        User    @relation("KonsultasiBK", fields: [bkId], references: [id])
+  bkId      Int
+
+  judul     String
+  deskripsi String   @db.Text
+  tanggal   DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+  @@index([bkId])
+  @@index([tanggal])
 }

@@ -46,6 +46,7 @@ const getStudentDashboardByAcademicYear = async (req, res) => {
       prisma.studentReport.findMany({
         where: {
           studentId: student.id,
+          status: "approved", // Only show approved reports
           item: {
             tipe: "pelanggaran",
           },
@@ -67,6 +68,7 @@ const getStudentDashboardByAcademicYear = async (req, res) => {
       prisma.studentReport.findMany({
         where: {
           studentId: student.id,
+          status: "approved", // Only show approved reports
           item: {
             tipe: "prestasi",
           },
@@ -205,6 +207,9 @@ const getStudentReportsByAcademicYear = async (req, res) => {
       whereClause.tipe = tipe;
     }
 
+    // Only show approved reports
+    whereClause.status = "approved";
+
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const [reports, total] = await Promise.all([
@@ -317,13 +322,21 @@ const getStudentProfile = async (req, res) => {
     const [totalReports, violationReports, achievementReports] =
       await Promise.all([
         prisma.studentReport.count({
-          where: { studentId: student.id },
+          where: { studentId: student.id, status: "approved" },
         }),
         prisma.studentReport.count({
-          where: { studentId: student.id, tipe: "violation" },
+          where: {
+            studentId: student.id,
+            status: "approved",
+            tipe: "violation",
+          },
         }),
         prisma.studentReport.count({
-          where: { studentId: student.id, tipe: "achievement" },
+          where: {
+            studentId: student.id,
+            status: "approved",
+            tipe: "achievement",
+          },
         }),
       ]);
 
